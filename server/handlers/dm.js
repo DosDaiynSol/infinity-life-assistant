@@ -124,6 +124,19 @@ async function handleDMBatch(dms) {
     // Process each user's messages
     for (const [senderId, userDMs] of Object.entries(dmsByUser)) {
         try {
+            // Get existing user or create new one
+            let user = userManager.getUser(senderId);
+
+            // If user doesn't have username, try to fetch it
+            if (!user.username) {
+                console.log(`[DM] Fetching username for ${senderId}...`);
+                const profile = await instagramApi.getUserProfile(senderId);
+                if (profile?.username) {
+                    userManager.updateUser(senderId, { username: profile.username, name: profile.name });
+                    console.log(`[DM] Got username: @${profile.username}`);
+                }
+            }
+
             // Track user activity
             userManager.trackActivity(senderId, 'dm');
 
@@ -131,13 +144,14 @@ async function handleDMBatch(dms) {
             if (!userManager.isAIEnabled(senderId, 'dm')) {
                 results.push({
                     senderId,
+                    username: user.username,
                     messages: userDMs.map(dm => dm.text),
                     response: null,
                     responded: false,
                     rejection: { code: 'ai_disabled', label: 'ИИ отключен', icon: '🚫' },
                     status: 'skipped'
                 });
-                console.log(`[DM] AI disabled for ${senderId}`);
+                console.log(`[DM] AI disabled for ${user.username || senderId}`);
                 continue;
             }
 
@@ -147,8 +161,12 @@ async function handleDMBatch(dms) {
             // Send reply
             const sent = await instagramApi.sendDirectMessage(senderId, responseText);
 
+            // Refresh user to get latest data
+            user = userManager.getUser(senderId);
+
             results.push({
                 senderId,
+                username: user.username,
                 messages: userDMs.map(dm => dm.text),
                 response: responseText,
                 responded: sent,
@@ -156,7 +174,7 @@ async function handleDMBatch(dms) {
                 status: sent ? 'sent' : 'error'
             });
 
-            console.log(`[DM Reply] To ${senderId}: ${responseText.substring(0, 80)}...`);
+            console.log(`[DM Reply] To ${user.username || senderId}: ${responseText.substring(0, 80)}...`);
 
         } catch (error) {
             console.error(`[DM Error] ${senderId}:`, error.message);
