@@ -61,7 +61,8 @@ class YouTubeOAuth {
             response_type: 'code',
             scope: scopes,
             access_type: 'offline',
-            prompt: 'consent' // Force refresh token generation
+            prompt: 'consent', // Force refresh token generation
+            authuser: '3' // Select specific Google account
         });
 
         return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
