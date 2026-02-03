@@ -62,7 +62,7 @@ class YouTubeOAuth {
             scope: scopes,
             access_type: 'offline',
             prompt: 'consent', // Force refresh token generation
-            authuser: '3' // Select specific Google account
+            login_hint: 'gassanov2030@gmail.com' // Pre-select the correct account
         });
 
         return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
