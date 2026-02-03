@@ -4,7 +4,7 @@ const path = require('path');
 
 // Load clinic data
 const clinicData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '../../data/clinic_data.json'), 'utf8')
+    fs.readFileSync(path.join(__dirname, '../data/clinic_data.json'), 'utf8')
 );
 
 const openai = new OpenAI({

@@ -1,7 +1,7 @@
 const { OpenAI } = require('openai');
 const instagramApi = require('../services/instagram-api');
 const userManager = require('../services/user-manager');
-const clinicData = require('../../data/clinic_data.json');
+const clinicData = require('../data/clinic_data.json');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
