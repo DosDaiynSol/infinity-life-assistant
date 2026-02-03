@@ -340,4 +340,180 @@ function escapeHtml(text) {
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+// ==========================================
+// Platform Switching
+// ==========================================
+let activePlatform = 'instagram';
+
+function switchPlatform(platform) {
+  activePlatform = platform;
+
+  // Update tabs
+  document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`platform${platform.charAt(0).toUpperCase() + platform.slice(1)}`).classList.add('active');
+
+  // Update content
+  document.querySelectorAll('.platform-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`platform-${platform}`).classList.add('active');
+
+  // Load data for YouTube if switching to it
+  if (platform === 'youtube') {
+    loadYouTubeData();
+  }
+}
+
+// ==========================================
+// YouTube Dashboard
+// ==========================================
+let ytCachedHistory = [];
+let ytCachedVideos = [];
+
+async function loadYouTubeData() {
+  await Promise.all([loadYouTubeStatus(), loadYouTubeHistory(), loadYouTubeVideos()]);
+}
+
+async function loadYouTubeStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/api/youtube/status`);
+    const data = await response.json();
+
+    const dot = document.getElementById('ytAuthDot');
+    const status = document.getElementById('ytAuthStatus');
+
+    if (data.authorized) {
+      dot.classList.add('authorized');
+      status.textContent = 'Авторизован ✅';
+    } else {
+      dot.classList.remove('authorized');
+      status.textContent = 'Не авторизован ❌';
+    }
+
+    updateText('ytPollingInterval', data.pollingInterval || '5 мин');
+    updateText('ytLastProcessed', data.stats?.lastProcessed
+      ? new Date(data.stats.lastProcessed).toLocaleTimeString('ru-RU')
+      : '-');
+    updateText('ytVideosCount', data.stats?.processedVideos || 0);
+    updateText('ytCommentsCount', data.stats?.totalComments || 0);
+    updateText('ytResponsesCount', data.stats?.totalResponses || 0);
+  } catch (error) {
+    console.error('YouTube status error:', error);
+  }
+}
+
+async function loadYouTubeHistory() {
+  try {
+    const response = await fetch(`${API_BASE}/api/youtube/history`);
+    const history = await response.json();
+    ytCachedHistory = history;
+
+    const container = document.getElementById('ytHistoryList');
+    if (history.length === 0) {
+      container.innerHTML = '<div class="empty-state">Ожидание ответов...</div>';
+      return;
+    }
+
+    container.innerHTML = history.slice(0, 20).map(item => `
+      <div class="yt-history-item">
+        <div class="yt-history-header">
+          <span class="yt-video-title">${escapeHtml(item.videoTitle || 'Видео')}</span>
+          <span class="yt-time">${item.timestamp ? new Date(item.timestamp).toLocaleTimeString('ru-RU') : ''}</span>
+        </div>
+        <div class="yt-comment-author">${escapeHtml(item.author)}</div>
+        <div class="yt-comment-text">💬 ${escapeHtml(item.comment)}</div>
+        <div class="yt-response-text">↳ ${escapeHtml(item.response)}</div>
+      </div>
+    `).join('');
+  } catch (error) {
+    console.error('YouTube history error:', error);
+  }
+}
+
+async function loadYouTubeVideos() {
+  try {
+    const response = await fetch(`${API_BASE}/api/youtube/videos`);
+    const data = await response.json();
+    ytCachedVideos = data.videos || [];
+
+    const container = document.getElementById('ytVideosList');
+    if (ytCachedVideos.length === 0) {
+      container.innerHTML = '<div class="empty-state">Нет видео</div>';
+      return;
+    }
+
+    container.innerHTML = ytCachedVideos.slice(0, 6).map(video => `
+      <div class="yt-video-card" onclick="ytShowVideo('${video.id}')">
+        <img class="yt-video-thumb" src="${video.thumbnail}" alt="${escapeHtml(video.title)}" onerror="this.style.display='none'">
+        <div class="yt-video-info">
+          <div class="yt-video-card-title">${escapeHtml(video.title)}</div>
+          <div class="yt-video-date">${new Date(video.publishedAt).toLocaleDateString('ru-RU')}</div>
+          <div class="yt-video-actions">
+            <button class="yt-process-btn" onclick="event.stopPropagation(); ytProcessVideo('${video.id}')">
+              ▶️ Обработать
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (error) {
+    console.error('YouTube videos error:', error);
+  }
+}
+
+async function ytProcessChannel() {
+  const btn = document.getElementById('btnYtProcess');
+  btn.textContent = '⏳ Обрабатываю...';
+  btn.classList.add('loading');
+
+  try {
+    await fetch(`${API_BASE}/api/youtube/process-channel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoCount: 5 })
+    });
+    btn.textContent = '✅ Готово!';
+    await loadYouTubeData();
+
+    setTimeout(() => {
+      btn.textContent = '▶️ Обработать канал';
+      btn.classList.remove('loading');
+    }, 2000);
+  } catch (error) {
+    btn.textContent = '❌ Ошибка';
+    setTimeout(() => {
+      btn.textContent = '▶️ Обработать канал';
+      btn.classList.remove('loading');
+    }, 2000);
+  }
+}
+
+async function ytProcessVideo(videoId) {
+  try {
+    await fetch(`${API_BASE}/api/youtube/process-video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId })
+    });
+    await loadYouTubeData();
+  } catch (error) {
+    console.error('Process video error:', error);
+  }
+}
+
+function ytShowVideo(videoId) {
+  window.open(`https://youtube.com/watch?v=${videoId}`, '_blank');
+}
+
+function ytAuthorize() {
+  window.open('/auth/youtube', '_blank');
+}
+
+// Refresh YouTube data periodically when on YouTube tab
+setInterval(() => {
+  if (activePlatform === 'youtube') {
+    loadYouTubeStatus();
+    loadYouTubeHistory();
+  }
+}, 15000);
+
 console.log('🚀 INFINITY LIFE Dashboard v3 initialized');
+console.log('📺 YouTube Dashboard enabled');
