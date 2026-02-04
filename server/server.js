@@ -152,9 +152,6 @@ app.post('/webhook', (req, res) => {
               text: msg.message.text,
               timestamp: msg.timestamp
             });
-            stats.totalMessages++;
-            stats.uniqueDMSenders.add(msg.sender.id);
-            trackDaily('dms');
             console.log(`[DM] From: ${msg.sender.id}, Text: ${msg.message.text}`);
           }
         }
@@ -172,9 +169,6 @@ app.post('/webhook', (req, res) => {
               text: val.text,
               mediaId: val.media?.id
             });
-            stats.totalComments++;
-            if (val.from?.id) stats.uniqueCommenters.add(val.from.id);
-            trackDaily('comments');
             console.log(`[Comment] From: @${val.from?.username}, Text: ${val.text}`);
           }
         }
