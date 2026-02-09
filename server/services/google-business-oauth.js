@@ -130,9 +130,12 @@ class GoogleBusinessOAuth {
             return null;
         }
 
-        // Check if token is expired (with 5 min buffer)
-        if (this.tokens.expires_at && Date.now() > this.tokens.expires_at - 300000) {
-            console.log('[Google Business OAuth] Token expired, refreshing...');
+        // Check if token is expired (with 5 min buffer) or access_token is missing
+        const isExpired = !this.tokens.expires_at || Date.now() > this.tokens.expires_at - 300000;
+        const needsRefresh = !this.tokens.access_token || isExpired;
+
+        if (needsRefresh && this.tokens.refresh_token) {
+            console.log('[Google Business OAuth] Token expired or missing, refreshing...');
             return await this.refreshAccessToken();
         }
 
