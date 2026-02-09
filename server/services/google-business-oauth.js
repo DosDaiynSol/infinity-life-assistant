@@ -141,7 +141,7 @@ class GoogleBusinessOAuth {
 
     // Check if authorized
     isAuthorized() {
-        return !!this.tokens?.access_token;
+        return !!(this.tokens?.access_token || this.tokens?.refresh_token);
     }
 }
 
