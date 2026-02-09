@@ -147,37 +147,100 @@ class ThreadsDatabase {
     }
 
     /**
-     * Get daily statistics
+     * Get all-time statistics
      * @returns {Promise<Object>}
      */
-    async getDailyStats() {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    async getStats() {
+        // Total counts from processed posts
+        const { count: totalPosts } = await this.supabase
+            .from('threads_processed_posts')
+            .select('*', { count: 'exact', head: true });
 
-        const { data: logs } = await this.supabase
-            .from('threads_api_logs')
-            .select('results_count, new_posts_count')
-            .gte('created_at', today.toISOString());
-
-        const { count: repliesCount } = await this.supabase
+        const { count: newCount } = await this.supabase
             .from('threads_processed_posts')
             .select('*', { count: 'exact', head: true })
-            .eq('status', 'replied')
-            .gte('replied_at', today.toISOString());
+            .eq('status', 'new');
 
         const { count: validatedCount } = await this.supabase
             .from('threads_processed_posts')
             .select('*', { count: 'exact', head: true })
-            .eq('status', 'validated')
-            .gte('processed_at', today.toISOString());
+            .eq('status', 'validated');
+
+        const { count: repliedCount } = await this.supabase
+            .from('threads_processed_posts')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'replied');
+
+        const { count: skippedCount } = await this.supabase
+            .from('threads_processed_posts')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'skipped');
+
+        // API requests count
+        const { count: apiRequests } = await this.supabase
+            .from('threads_api_logs')
+            .select('*', { count: 'exact', head: true });
+
+        // Calculate conversion rate
+        const conversionRate = totalPosts > 0
+            ? Math.round((repliedCount / totalPosts) * 100)
+            : 0;
 
         return {
-            apiRequests: logs?.length || 0,
-            postsFound: logs?.reduce((sum, l) => sum + l.results_count, 0) || 0,
-            newPosts: logs?.reduce((sum, l) => sum + l.new_posts_count, 0) || 0,
+            apiRequests: apiRequests || 0,
+            postsFound: totalPosts || 0,
+            newPosts: newCount || 0,
             validated: validatedCount || 0,
-            replied: repliesCount || 0
+            replied: repliedCount || 0,
+            skipped: skippedCount || 0,
+            conversionRate
         };
+    }
+
+    /**
+     * Get daily breakdown for charts (last 7 days)
+     * @returns {Promise<Object>}
+     */
+    async getChartData() {
+        const days = {};
+        const now = new Date();
+
+        // Initialize last 7 days
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            const key = date.toISOString().split('T')[0];
+            days[key] = { posts: 0, validated: 0, replied: 0 };
+        }
+
+        // Get posts from last 7 days
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        const { data: posts } = await this.supabase
+            .from('threads_processed_posts')
+            .select('created_at, status, replied_at')
+            .gte('created_at', weekAgo.toISOString());
+
+        // Aggregate by day
+        for (const post of (posts || [])) {
+            const day = post.created_at?.split('T')[0];
+            if (days[day]) {
+                days[day].posts++;
+                if (post.status === 'validated') days[day].validated++;
+                if (post.status === 'replied') {
+                    days[day].validated++;
+                    days[day].replied++;
+                }
+            }
+        }
+
+        return days;
+    }
+
+    // Alias for backward compatibility
+    async getDailyStats() {
+        return this.getStats();
     }
 }
 

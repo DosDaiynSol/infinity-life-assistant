@@ -520,12 +520,15 @@ app.delete('/api/google/reviews/reply', async (req, res) => {
 // Threads search status
 app.get('/api/threads/status', async (req, res) => {
   try {
-    const stats = await threadsKeywordSearch.getStats();
+    const threadsDB = require('./services/threads-database');
+    const stats = await threadsDB.getStats();
+    const chartData = await threadsDB.getChartData();
     res.json({
       enabled: true,
       schedule: ['08:00', '14:00', '20:00'],
       maxRepliesPerDay: 10,
-      stats
+      stats,
+      chartData
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

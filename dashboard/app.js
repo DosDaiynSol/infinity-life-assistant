@@ -540,6 +540,17 @@ async function loadThreadsStatus() {
     updateText('threadsPostsFound', data.stats?.postsFound || 0);
     updateText('threadsValidated', data.stats?.validated || 0);
     updateText('threadsReplied', data.stats?.replied || 0);
+
+    // Update conversion rate if element exists
+    const convEl = document.getElementById('threadsConversion');
+    if (convEl) {
+      convEl.textContent = `${data.stats?.conversionRate || 0}% конверсия`;
+    }
+
+    // Update chart if data available
+    if (data.chartData) {
+      updateThreadsChart(data.chartData);
+    }
   } catch (error) {
     console.error('Threads status error:', error);
   }
@@ -708,6 +719,68 @@ setInterval(() => {
     loadThreadsStatus();
   }
 }, 30000);
+
+// Threads Chart
+let threadsChart = null;
+
+function updateThreadsChart(chartData) {
+  const ctx = document.getElementById('threadsChart');
+  if (!ctx) return;
+
+  const labels = Object.keys(chartData).map(d => {
+    const date = new Date(d);
+    return `${date.getDate()}.${date.getMonth() + 1}`;
+  });
+
+  const postsData = Object.values(chartData).map(d => d.posts);
+  const validatedData = Object.values(chartData).map(d => d.validated);
+  const repliedData = Object.values(chartData).map(d => d.replied);
+
+  if (threadsChart) {
+    threadsChart.destroy();
+  }
+
+  threadsChart = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Найдено',
+          data: postsData,
+          borderColor: '#6E7BF4',
+          backgroundColor: 'rgba(110, 123, 244, 0.1)',
+          fill: true,
+          tension: 0.4
+        },
+        {
+          label: 'Валидных',
+          data: validatedData,
+          borderColor: '#4ECDC4',
+          backgroundColor: 'transparent',
+          tension: 0.4
+        },
+        {
+          label: 'Ответов',
+          data: repliedData,
+          borderColor: '#00B894',
+          backgroundColor: 'transparent',
+          tension: 0.4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
 
 console.log('🚀 INFINITY LIFE Dashboard v3 initialized');
 console.log('📺 YouTube Dashboard enabled');
