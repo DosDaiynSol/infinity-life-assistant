@@ -9,13 +9,36 @@ const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
 
-// Load keywords
-const keywordsPath = path.join(__dirname, '../../data/threads_keywords.json');
-const keywordsData = JSON.parse(fs.readFileSync(keywordsPath, 'utf-8'));
+// Load keywords with fallback
+let keywordsData;
+try {
+    const keywordsPath = path.join(__dirname, '../../data/threads_keywords.json');
+    keywordsData = JSON.parse(fs.readFileSync(keywordsPath, 'utf-8'));
+} catch (e) {
+    console.log('[Threads] Keywords file not found, using defaults');
+    keywordsData = {
+        keywords: [
+            'остеопат астана', 'ищу остеопата', 'посоветуйте остеопата',
+            'невролог астана', 'детский невролог астана',
+            'мануальный терапевт астана', 'мануальная терапия',
+            'боль в спине астана', 'болит спина', 'болит поясница',
+            'грыжа позвоночника', 'межпозвоночная грыжа',
+            'сколиоз астана', 'артроз астана',
+            'зрр астана', 'задержка речи', 'аутизм астана',
+            'посоветуйте врача астана', 'посоветуйте клинику'
+        ]
+    };
+}
 
 // Load clinic data for context
-const clinicPath = path.join(__dirname, '../../data/clinic_data.json');
-const clinicData = JSON.parse(fs.readFileSync(clinicPath, 'utf-8'));
+let clinicData;
+try {
+    const clinicPath = path.join(__dirname, '../../data/clinic_data.json');
+    clinicData = JSON.parse(fs.readFileSync(clinicPath, 'utf-8'));
+} catch (e) {
+    console.log('[Threads] Clinic data not found, using defaults');
+    clinicData = { clinic: { name: 'INFINITY LIFE', contactPhone: '87470953952' } };
+}
 
 class ThreadsKeywordSearch {
     constructor() {
