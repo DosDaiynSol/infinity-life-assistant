@@ -23,6 +23,9 @@
         <button class="platform-tab" onclick="switchPlatform('youtube')" id="platformYoutube">
           <span>📺</span> YouTube
         </button>
+        <button class="platform-tab" onclick="switchPlatform('threads')" id="platformThreads">
+          <span>🧵</span> Threads
+        </button>
       </div>
     </header>
 
@@ -201,6 +204,113 @@
         </div>
       </div>
     </div> <!-- End YouTube Dashboard -->
+
+    <!-- Threads Dashboard -->
+    <div class="platform-content" id="platform-threads">
+      <div class="subtitle">Threads Keyword Search</div>
+
+      <!-- Threads Status Bar -->
+      <div class="threads-status-bar" id="threadsStatusBar">
+        <div class="threads-status-item">
+          <span class="threads-status-dot active"></span>
+          <span>Система активна</span>
+        </div>
+        <div class="threads-status-item">
+          <span>⏰</span>
+          <span>Расписание: <span id="threadsSchedule">08:00, 14:00, 20:00</span></span>
+        </div>
+        <div class="threads-status-item">
+          <span>📊</span>
+          <span>Лимит: <span id="threadsMaxReplies">10</span> ответов/день</span>
+        </div>
+      </div>
+
+      <!-- Threads Controls -->
+      <div class="controls">
+        <button class="btn-run threads-btn" id="btnThreadsSearch" onclick="threadsRunSearch()">
+          🔍 Запустить поиск
+        </button>
+        <button class="btn-secondary" onclick="threadsRefresh()">
+          🔄 Обновить
+        </button>
+      </div>
+
+      <!-- Threads Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card threads-card">
+          <div class="stat-icon">🔍</div>
+          <div class="stat-value" id="threadsApiRequests">0</div>
+          <div class="stat-label">API запросов</div>
+        </div>
+        <div class="stat-card threads-card">
+          <div class="stat-icon">📝</div>
+          <div class="stat-value" id="threadsPostsFound">0</div>
+          <div class="stat-label">Постов найдено</div>
+        </div>
+        <div class="stat-card threads-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-value" id="threadsValidated">0</div>
+          <div class="stat-label">Валидных</div>
+        </div>
+        <div class="stat-card threads-card">
+          <div class="stat-icon">💬</div>
+          <div class="stat-value" id="threadsReplied">0</div>
+          <div class="stat-label">Ответов</div>
+        </div>
+      </div>
+
+      <!-- Threads Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchThreadsTab('new')">🆕 Новые (<span
+            id="threadsNewCount">0</span>)</button>
+        <button class="tab" onclick="switchThreadsTab('validated')">✅ Валидные (<span
+            id="threadsValidatedCount">0</span>)</button>
+        <button class="tab" onclick="switchThreadsTab('replied')">💬 Отвечено (<span
+            id="threadsRepliedCount">0</span>)</button>
+        <button class="tab" onclick="switchThreadsTab('keywords')">🔑 Ключевые слова</button>
+      </div>
+
+      <!-- Tab: New Posts -->
+      <div class="threads-tab-content active" id="threads-tab-new">
+        <div class="section">
+          <h2 class="section-title">🆕 Новые посты</h2>
+          <div class="threads-posts-list" id="threadsNewList">
+            <div class="empty-state">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Validated Posts -->
+      <div class="threads-tab-content" id="threads-tab-validated">
+        <div class="section">
+          <h2 class="section-title">✅ Валидные посты (ожидают ответа)</h2>
+          <div class="threads-posts-list" id="threadsValidatedList">
+            <div class="empty-state">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Replied Posts -->
+      <div class="threads-tab-content" id="threads-tab-replied">
+        <div class="section">
+          <h2 class="section-title">💬 Отправленные ответы</h2>
+          <div class="threads-posts-list" id="threadsRepliedList">
+            <div class="empty-state">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Keywords -->
+      <div class="threads-tab-content" id="threads-tab-keywords">
+        <div class="section">
+          <h2 class="section-title">🔑 Ключевые слова (98)</h2>
+          <div class="threads-keywords-grid" id="threadsKeywordsList">
+            <div class="empty-state">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+    </div> <!-- End Threads Dashboard -->
 
   </div>
 

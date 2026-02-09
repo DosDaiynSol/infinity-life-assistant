@@ -13,6 +13,14 @@ const youtubeOAuth = require('./services/youtube-oauth');
 const youtubeAPI = require('./services/youtube-api');
 const youtubeHandler = require('./handlers/youtube');
 
+// Google Business Profile services
+const googleBusinessOAuth = require('./services/google-business-oauth');
+const googleBusinessAPI = require('./services/google-business-api');
+
+// Threads Keyword Search services
+const threadsKeywordSearch = require('./services/threads-keyword-search');
+const schedule = require('node-schedule');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -392,6 +400,200 @@ app.post('/webhook/youtube', async (req, res) => {
   }
 });
 
+// ==========================================
+// Google Business Profile API Routes
+// ==========================================
+
+// Google Business OAuth - Start authorization
+app.get('/auth/google', (req, res) => {
+  const authUrl = googleBusinessOAuth.getAuthUrl();
+  console.log('[Google Business OAuth] Redirecting to Google authorization');
+  res.redirect(authUrl);
+});
+
+// Google Business OAuth - Callback handler
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+
+  if (error) {
+    console.error('[Google Business OAuth] Authorization error:', error);
+    return res.status(400).send(`Authorization failed: ${error}`);
+  }
+
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+
+  const result = await googleBusinessOAuth.exchangeCode(code);
+
+  if (result.success) {
+    res.send(`
+      <html>
+        <head><title>Google Business Authorization Success</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+          <h1>✅ Google Business Profile авторизация успешна!</h1>
+          <p>Токены сохранены. Теперь можно мониторить отзывы Google Maps.</p>
+          <a href="/">Вернуться к Dashboard</a>
+        </body>
+      </html>
+    `);
+  } else {
+    res.status(500).send(`Authorization failed: ${JSON.stringify(result.error)}`);
+  }
+});
+
+// Google Business status check
+app.get('/api/google/status', (req, res) => {
+  res.json({
+    authorized: googleBusinessAPI.isAuthorized(),
+    locationId: process.env.GOOGLE_LOCATION_ID || 'not set',
+    accountId: process.env.GOOGLE_ACCOUNT_ID || 'not set'
+  });
+});
+
+// Get Google Business accounts (to find account ID)
+app.get('/api/google/accounts', async (req, res) => {
+  try {
+    const accounts = await googleBusinessAPI.listAccounts();
+    res.json({ count: accounts.length, accounts });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get locations for an account
+app.get('/api/google/locations', async (req, res) => {
+  try {
+    const { accountId } = req.query;
+    if (!accountId) {
+      return res.status(400).json({ error: 'accountId is required' });
+    }
+    const locations = await googleBusinessAPI.listLocations(accountId);
+    res.json({ count: locations.length, locations });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all reviews for INFINITY LIFE
+app.get('/api/google/reviews', async (req, res) => {
+  try {
+    const reviews = await googleBusinessAPI.getAllReviews();
+    res.json(reviews);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reply to a review
+app.post('/api/google/reviews/reply', async (req, res) => {
+  try {
+    const { reviewName, comment } = req.body;
+    if (!reviewName || !comment) {
+      return res.status(400).json({ error: 'reviewName and comment are required' });
+    }
+    const result = await googleBusinessAPI.replyToReview(reviewName, comment);
+    res.json({ status: 'ok', result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a reply
+app.delete('/api/google/reviews/reply', async (req, res) => {
+  try {
+    const { reviewName } = req.body;
+    if (!reviewName) {
+      return res.status(400).json({ error: 'reviewName is required' });
+    }
+    const result = await googleBusinessAPI.deleteReply(reviewName);
+    res.json({ status: 'ok', result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Threads Keyword Search API Routes
+// ==========================================
+
+// Threads search status
+app.get('/api/threads/status', async (req, res) => {
+  try {
+    const stats = await threadsKeywordSearch.getStats();
+    res.json({
+      enabled: true,
+      schedule: ['08:00', '14:00', '20:00'],
+      maxRepliesPerDay: 10,
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get found posts
+app.get('/api/threads/posts', async (req, res) => {
+  try {
+    const { status = 'all' } = req.query;
+    const threadsDB = require('./services/threads-database');
+    let posts;
+    if (status === 'all') {
+      posts = await threadsDB.getPostsByStatus('new', 100);
+      const validated = await threadsDB.getPostsByStatus('validated', 100);
+      const replied = await threadsDB.getPostsByStatus('replied', 100);
+      posts = [...posts, ...validated, ...replied];
+    } else {
+      posts = await threadsDB.getPostsByStatus(status, 100);
+    }
+    res.json({ count: posts.length, posts });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual trigger - run search cycle
+app.post('/api/threads/search', async (req, res) => {
+  try {
+    console.log('[Threads] Manual search triggered');
+    const stats = await threadsKeywordSearch.runManualCycle();
+    res.json({ status: 'ok', stats });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual trigger - validate new posts only (no new search)
+app.post('/api/threads/validate', async (req, res) => {
+  try {
+    console.log('[Threads] Manual validation triggered');
+    await threadsKeywordSearch.processNewPosts();
+    const stats = await threadsKeywordSearch.getStats();
+    res.json({ status: 'ok', stats });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Schedule Threads keyword search - 3 cycles per day
+// Cycle 1: 08:00
+schedule.scheduleJob('0 8 * * *', async () => {
+  console.log('[Threads Schedule] Running cycle 1 (08:00)');
+  await threadsKeywordSearch.runSearchCycle(0);
+});
+
+// Cycle 2: 14:00
+schedule.scheduleJob('0 14 * * *', async () => {
+  console.log('[Threads Schedule] Running cycle 2 (14:00)');
+  await threadsKeywordSearch.runSearchCycle(1);
+});
+
+// Cycle 3: 20:00
+schedule.scheduleJob('0 20 * * *', async () => {
+  console.log('[Threads Schedule] Running cycle 3 (20:00)');
+  await threadsKeywordSearch.runSearchCycle(2);
+});
+
 // Dashboard route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
@@ -403,7 +605,10 @@ app.listen(PORT, () => {
   console.log(`📸 Instagram Webhook: http://localhost:${PORT}/webhook`);
   console.log(`📺 YouTube OAuth: http://localhost:${PORT}/auth/youtube`);
   console.log(`📺 YouTube Webhook: http://localhost:${PORT}/webhook/youtube`);
+  console.log(`📍 Google Business OAuth: http://localhost:${PORT}/auth/google`);
+  console.log(`🧵 Threads Search: /api/threads/status | /api/threads/search`);
   console.log(`⏱️  Buffer processing: every 60 seconds`);
-  console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}\n`);
+  console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}`);
+  console.log(`📍 Google Business authorized: ${googleBusinessOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/google'}`);
+  console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00\n`);
 });
-

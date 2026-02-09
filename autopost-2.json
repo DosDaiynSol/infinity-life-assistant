@@ -1,0 +1,2090 @@
+{
+  "name": "autopost",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "TEXT"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.output.body }}"
+            },
+            {
+              "name": "poll_attachment",
+              "value": "={{\nJSON.stringify({\n  \"option_a\": $json.output.pollOptions[0],\n  \"option_b\": $json.output.pollOptions[1],\n  \"option_c\": $json.output.pollOptions[2] ? $json.output.pollOptions[2] : undefined,\n  \"option_d\": $json.output.pollOptions[3] ? $json.output.pollOptions[3] : undefined,\n  \"duration\": 172800\n})\n}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        -880
+      ],
+      "id": "938db98d-6b41-48c2-bb12-de861b463f77",
+      "name": "create post1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads_publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"creation_id\": \"{{ $json.body.id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        64,
+        -1488
+      ],
+      "id": "ca74528d-1390-4df5-8c22-d319e8a47d27",
+      "name": "publish post1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU",
+          "mode": "list",
+          "cachedResultName": "content plan infinity line",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 51684985,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit#gid=51684985"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Threads_id": "={{ $json.id }}",
+            "Status": "Опубликовано",
+            "row_number": "={{ $('If').item.json.row_number }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Content",
+              "displayName": "Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Telegram_message_id",
+              "displayName": "Telegram_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Threads_id",
+              "displayName": "Threads_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        288,
+        -1488
+      ],
+      "id": "512e245d-4195-4e14-b5c2-8a9f88d6c050",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "tfRLRXqkNRpbEKzu",
+          "name": "Daiyn Solutions Google Sheets"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -384,
+        -400
+      ],
+      "id": "bfbef811-c5ee-4725-a45b-d45b06a4b680",
+      "name": "6pm"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 20
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -384,
+        -208
+      ],
+      "id": "888364e6-3d72-43c0-b118-a7483faf76de",
+      "name": "8pm"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -384,
+        -592
+      ],
+      "id": "e8f6ec40-e66f-4fd8-b4aa-f5e13a2e16aa",
+      "name": "8am"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "include": "specifiedFields",
+        "fieldsToInclude": "row_number, Topic, Content",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        64,
+        -224
+      ],
+      "id": "6366d1a4-7f61-4a61-9624-6481c7f4e5fa",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.data }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a professional post moderator. Your task is to receive a list of posts available for publication, compare it with the content plan, and select the appropriate post based on the date and theme.\nCurrent time: {{ $now }}\n\nContent Plan:\n{{ $json[\"content plan\"] }}\n\nYour response must be in strict JSON format and contain ONLY the following fields:\n1.  `contentPlanInfo`: A brief summary of the content plan for the current date in Russian.\n2.  `selectedPost`: An object containing the `rowNumber` and `body` of the selected post.\n3.  `relevance`: The degree of relevance to the content plan theme (\"low\", \"medium\", or \"high\").\n4.  `reasonForSelection`: A brief reason for selecting this publication in Russian."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        544,
+        -224
+      ],
+      "id": "f2fe49bb-1b2e-4ced-9087-afce8bc7a66f",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -16
+      ],
+      "id": "156a6c0d-186c-441e-9b04-1d7f4ef9016a",
+      "name": "Auto-fixing Output Parser"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"contentPlanInfo\": \"Selected date from content plan\",\n  \"selectedPost\": {\n    \"rowNumber\": \"Row number of the chosen post\",\n    \"body\": \"The text of the chosen post\"\n  },\n  \"relevance\": \"high\",\n  \"reasonForSelection\": \"Объяснение, почему этот пост подходит под план или почему выбран альтернативный\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        208
+      ],
+      "id": "ae57263a-5769-4687-ac8d-12921716a52b",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "TEXT"
+            },
+            {
+              "name": "text",
+              "value": "={{ $('Switch').item.json.Content }}"
+            },
+            {
+              "name": "access_token",
+              "value": "THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "poll_attachment",
+              "value": "={\"option_a\":\"first\", \"option_b\":\"second option\"}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -160,
+        -1488
+      ],
+      "id": "714b8fef-7eaf-4b2f-ac53-da1c49c4daa9",
+      "name": "HTTP Request",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.randomNumber }}",
+                    "rightValue": "1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d36f1ee9-c70f-4db8-ac31-ea6ee807f199"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "poll"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f358ef9d-165d-4773-826a-628bbcf48a24",
+                    "leftValue": "={{ $json.randomNumber }}",
+                    "rightValue": "2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "49ebb9eb-d81b-4161-ac13-aa39da944af3",
+                    "leftValue": "={{ $json.randomNumber }}",
+                    "rightValue": "3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1904,
+        -384
+      ],
+      "id": "348a4532-45e1-487a-98b7-98be306a4236",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  {\n    text: $json.Content,\n    media_type: \"TEXT\",\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -384,
+        -1488
+      ],
+      "id": "26676b3f-2e10-47f6-9187-39542bda30bc",
+      "name": "create post"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  {\n    text: $json.Content,\n    media_type: \"TEXT\",\n    \n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -384,
+        -1264
+      ],
+      "id": "dfdf7807-dbf4-4513-a8e4-7e107624e905",
+      "name": "create post2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads_publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"creation_id\": \"{{ $json.id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3248,
+        -880
+      ],
+      "id": "0a167602-e7ad-44f9-bb4b-81849d606dab",
+      "name": "publish post"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.threads.net/v1.0/keyword_search",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "search_type",
+              "value": "TOP"
+            },
+            {
+              "name": "fields",
+              "value": "id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "q"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "access_token"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -384,
+        -816
+      ],
+      "id": "dc9a7105-eb6e-48a8-90b0-bddd24162af8",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.threads.net/v1.0/keyword_search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "врач, астана"
+            },
+            {
+              "name": "search_type",
+              "value": "=RECENT"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -384,
+        -1040
+      ],
+      "id": "03511c80-2274-4531-a82d-08bf49e42e69",
+      "name": "create post3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Настройки диапазона\nconst min = 1;\nconst max = 3;\n\n// Формула генерации случайного целого числа (включительно min и max)\nconst randomInt = Math.floor(Math.random() * (max - min + 1)) + min;\n\n// Возврат данных в формате n8n\nreturn [\n  {\n    json: {\n      randomNumber: randomInt\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -368
+      ],
+      "id": "607be15b-d90c-41f3-bb8a-71e32de3efdc",
+      "name": "random"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU",
+          "mode": "list",
+          "cachedResultName": "content plan infinity line",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "moderated",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Ждёт публикации"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -160,
+        -336
+      ],
+      "id": "1adec359-20b0-41d9-b18d-ae1adb6befc1",
+      "name": "Get rows to publish",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "tfRLRXqkNRpbEKzu",
+          "name": "Daiyn Solutions Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee3ed6a2-b84e-440e-813e-f6c89e69dc76",
+              "name": "content plan",
+              "value": "=**Вторник (23 декабря)**\\n*   **19:00 (Reels):** Смешное видео: \\\"когда работаешь каждый день\\\". Цель: развлекательное.\\n*   **21:00:** Распаковка. Цель: познавательное.\\n\\n**Среда (24 декабря)**\\n*   **19:00 (Reels):** Как думаешь, каким методом лечили эту грыжу? (Ильяс и МРТ-снимок). Цель: продающее.\\n*   **21:00:** Грыжа: вылечим мануалкой и иглами (Ильяс). Цель: познавательное.\\n\\n**Четверг (25 декабря)**\\n*   **19:00 (Reels):** Седалищный нерв и остеопатия (Быков). Цель: познавательное, продающее.\\n*   **21:00:** Топ-3 гинекологические проблемы, с которыми работает врач-остеопат. Цель: познавательное.\\n\\n**Пятница (26 декабря)**\\n*   **19:00 (Reels):** Как проверить сосуды головы и шеи (Таратушка). Цель: продающее.\\n*   **21:00:** Кривая голова у грудничков: что делать (врач Таратушка). Цель: познавательное.\\n\\n**Суббота (27 декабря)**\\n*   **19:00 (Reels):** Хотите, чтобы ваши родители жили дольше? Проверьте эти анализы (терапевт). Цель: продающее.\\n*   **21:00:** Тест со стаканом (терапевт). Цель: продающий.\\n\\n**Воскресенье (28 декабря)**\\n*   **19:00 (Reels):** Когда позвонил начальник и сказал: \\\"камера заработала\\\". Цель: развлекательное.\\n*   **21:00:** Распаковка. Цель: продающее.\\n\\n---\\n\\n### Пятая неделя (29-31 декабря)\\n\\n**Понедельник (29.дек.)**\\n*   **19:00 (Публикация):** ЛФК: польза теннисного шарика, упражнения. Цель: продающее.\\n*   **21:00:** Латиф в клинике \\\"Инфинити\\\". Цель: познавательное.\\n\\n**Вторник (30.дек.)**\\n*   **19:00 (Reels):** Упражнения для шеи. Цель: информативное.\\n*   **21:00:** Вишлист каждой девушки в 2025. Цель: смешное.\\n\\n**Среда (31.дек.)**\\n*   **19:00 (Reels):** Поздравления. Цель: продающее.\\n*   **21:00:** Поздравления. Цель: познавательное.",
+              "type": "string"
+            },
+            {
+              "id": "f5ebdf8f-e1f5-4f62-aeb3-071a8f22ba33",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        -224
+      ],
+      "id": "1536147c-a0d7-4fac-9bb4-24e1ccccd78b",
+      "name": "set rows and content plan"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1d94e424-622a-4b5d-9c83-5fb7337d8a83",
+              "name": "contentPlanInfo",
+              "value": "={{ $json.output.contentPlanInfo }}",
+              "type": "string"
+            },
+            {
+              "id": "52557837-7298-4812-9829-2240a4f293cc",
+              "name": "row_number",
+              "value": "={{ $json.output.selectedPost.rowNumber }}",
+              "type": "number"
+            },
+            {
+              "id": "2dd1f479-7fa9-491a-bbc7-0ae5e60af668",
+              "name": "body",
+              "value": "={{ $json.output.selectedPost.body }}",
+              "type": "string"
+            },
+            {
+              "id": "a9a8b5c8-ceb5-4a2a-b663-4bcf0a6b3843",
+              "name": "relevance",
+              "value": "={{ $json.output.relevance }}",
+              "type": "string"
+            },
+            {
+              "id": "8175cb76-30e2-461c-8550-5b75b1304ea6",
+              "name": "reasonForSelection",
+              "value": "={{ $json.output.reasonForSelection }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        -224
+      ],
+      "id": "c1fbec45-6aac-4482-9f7f-a3e99bcc21b8",
+      "name": "structured output"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "row_number",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1232,
+        -368
+      ],
+      "id": "3bdb8fc3-7dbc-4702-bc38-aaae063e93c7",
+      "name": "catch post"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8fe17e67-fd8c-482f-9bff-186905192ab7",
+              "name": "row_number",
+              "value": "={{ $json.row_number }}",
+              "type": "number"
+            },
+            {
+              "id": "da264490-8e65-44f9-a29e-8f90c53448b1",
+              "name": "Topic",
+              "value": "={{ $json.Topic }}",
+              "type": "string"
+            },
+            {
+              "id": "99cbebe7-a386-4efd-8d82-af712e3f4922",
+              "name": "Content",
+              "value": "={{ $json.Content }}",
+              "type": "string"
+            },
+            {
+              "id": "2e0b7b13-1352-44ff-952f-e0928f9d7901",
+              "name": "Status",
+              "value": "={{ $json.Status }}",
+              "type": "string"
+            },
+            {
+              "id": "61ef622a-47f4-44f2-9a14-d5bf70cb7067",
+              "name": "contentPlanInfo",
+              "value": "={{ $json.contentPlanInfo }}",
+              "type": "string"
+            },
+            {
+              "id": "67dd88e9-cd92-4a53-80c5-ad45bdb83526",
+              "name": "relevance",
+              "value": "={{ $json.relevance }}",
+              "type": "string"
+            },
+            {
+              "id": "f35f7270-ab5f-45d3-8d88-f8fa940f59c2",
+              "name": "reasonForSelection",
+              "value": "={{ $json.reasonForSelection }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1456,
+        -368
+      ],
+      "id": "648a193a-0409-405b-8c29-45bac9d98778",
+      "name": "final info"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00494684-1472-4426-95a2-9342f79f4bc2",
+              "name": "row_number",
+              "value": "={{ $('final info').item.json.row_number }}",
+              "type": "string"
+            },
+            {
+              "id": "00c21d1c-9b77-4e8f-ae3d-c894707f18a3",
+              "name": "Topic",
+              "value": "={{ $('final info').item.json.Topic }}",
+              "type": "string"
+            },
+            {
+              "id": "45e65f51-7e7a-40bb-af19-3b962699cc8c",
+              "name": "Content",
+              "value": "={{ $('final info').item.json.Content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        -560
+      ],
+      "id": "97492b75-60eb-4a88-b5e4-b716f818decb",
+      "name": "to agent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00494684-1472-4426-95a2-9342f79f4bc2",
+              "name": "row_number",
+              "value": "={{ $('final info').item.json.row_number }}",
+              "type": "string"
+            },
+            {
+              "id": "00c21d1c-9b77-4e8f-ae3d-c894707f18a3",
+              "name": "Topic",
+              "value": "={{ $('final info').item.json.Topic }}",
+              "type": "string"
+            },
+            {
+              "id": "45e65f51-7e7a-40bb-af19-3b962699cc8c",
+              "name": "Content",
+              "value": "={{ $('final info').item.json.Content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        -368
+      ],
+      "id": "ed7b56d0-cfa2-413f-9ad5-6af23f6ab32f",
+      "name": "to agent1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00494684-1472-4426-95a2-9342f79f4bc2",
+              "name": "row_number",
+              "value": "={{ $('final info').item.json.row_number }}",
+              "type": "string"
+            },
+            {
+              "id": "00c21d1c-9b77-4e8f-ae3d-c894707f18a3",
+              "name": "Topic",
+              "value": "={{ $('final info').item.json.Topic }}",
+              "type": "string"
+            },
+            {
+              "id": "45e65f51-7e7a-40bb-af19-3b962699cc8c",
+              "name": "Content",
+              "value": "={{ $('final info').item.json.Content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        -144
+      ],
+      "id": "99e556a7-4790-4d6f-abeb-3a7e40464132",
+      "name": "to agent2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.Content }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an Engagement Agent specializing in social media interactions.\nYour task is to analyze the post text and generate a strict 2-option poll to boost engagement.\n\n**Input Text:**\n{{ $json.Content }}\n\n**Instructions:**\n1.  **Analyze:** Understand the core message of the post.\n2.  **Generate:** Create exactly 2 options for a poll.\n    * *Strategy A (Engagement):* Ask a relevant question (e.g., \"Было?\", \"Согласны?\").\n    * *Strategy B (Sales/CTA):* If the post is selling something, use short actions (e.g., \"Хочу\", \"Цена?\").\n3.  **Output:** Return a JSON object with the original `body` and the generated `pollOptions`.\n\n**CRITICAL TECHNICAL RULES (MUST FOLLOW OR SYSTEM FAILS):**\n* **Option Count:** EXACTLY 2 options.\n* **Length Limit (THE MOST IMPORTANT RULE):**\n    * The API has a strict **25-byte limit**.\n    * Since you are writing in Russian (Cyrillic), **1 character = 2 bytes**.\n    * Therefore, each option MUST be **12 CHARACTERS OR LESS** (including spaces).\n    * *Violation Example:* \"Хочу записаться\" (15 chars = 30 bytes -> CRASH).\n    * *Correct Example:* \"Хочу запись\" (11 chars = 22 bytes -> OK).\n    * *Correct Example:* \"Жду цены\" (8 chars = 16 bytes -> OK).\n\n**Output JSON Format:**\n{\n  \"body\": \"Original input text here...\",\n  \"pollOptions\": [\"Option1\", \"Option2\"]\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        2368,
+        -880
+      ],
+      "id": "98986e60-feeb-410d-b0a1-156be063905f",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        -656
+      ],
+      "id": "d5997880-7e55-4bb8-ad0b-af14be8ff22c",
+      "name": "Auto-fixing Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"body\": \"Здесь будет оригинальный текст поста, который пришел на вход...\",\n  \"pollOptions\": [\n    \"Вариант 1 (до 20 симв.)\",\n    \"Вариант 2 (до 20 симв.)\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2560,
+        -512
+      ],
+      "id": "fac1153f-6e10-4bb0-9e53-edbbea45ec83",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "chatId": "489615644",
+        "text": "=Пост опубликован на {{ $('6pm').item.json.Hour }}:{{ $('6pm').item.json.Minute }}\n\nТип поста: Текст + опрос\nКонтент: {{ $('AI Agent1').item.json.output.body }}\n\nСхожесть с контент планом: {{ $('final info').item.json.relevance }}\nПричина: {{ $('final info').item.json.reasonForSelection }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Опубликовать ✅",
+                    "additionalFields": {
+                      "callback_data": "=publish_post {{ $json.row_number }}"
+                    }
+                  },
+                  {
+                    "text": "Отменить 🚫",
+                    "additionalFields": {
+                      "callback_data": "=do_not_publish {{ $json.row_number }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3696,
+        -880
+      ],
+      "id": "a7d7704b-957a-4625-b297-58a1855c6a41",
+      "name": "Send a text message",
+      "webhookId": "c195c118-38a1-4eee-8489-a74eacf0c689",
+      "credentials": {
+        "telegramApi": {
+          "id": "RHpVHE4maNIIcoDo",
+          "name": "infinity life bot"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU",
+          "mode": "list",
+          "cachedResultName": "content plan infinity line",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "moderated",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('to agent').item.json.row_number }}",
+            "Threads_id": "={{ $json.id }}",
+            "Status": "Опубликовано"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Content",
+              "displayName": "Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Column 1",
+              "displayName": "Column 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Threads_id",
+              "displayName": "Threads_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3472,
+        -880
+      ],
+      "id": "0f090e81-3701-4b4e-a1ab-e5ce846d15fc",
+      "name": "Update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "tfRLRXqkNRpbEKzu",
+          "name": "Daiyn Solutions Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "TEXT"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.Content }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2352,
+        -368
+      ],
+      "id": "aad8e42c-5c5f-441a-b228-bd668378f745",
+      "name": "create post4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads_publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"creation_id\": \"{{ $('create post4').item.json.id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2800,
+        -368
+      ],
+      "id": "ee7f8a2b-70b6-480a-894a-15927017ce86",
+      "name": "publish post2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU",
+          "mode": "list",
+          "cachedResultName": "content plan infinity line",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "moderated",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('to agent1').item.json.row_number }}",
+            "Threads_id": "={{ $json.id }}",
+            "Status": "Опубликовано"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Content",
+              "displayName": "Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Column 1",
+              "displayName": "Column 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Threads_id",
+              "displayName": "Threads_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3024,
+        -368
+      ],
+      "id": "a173e4fb-14bd-4d5f-9888-f0dceecf7aa6",
+      "name": "Update row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "tfRLRXqkNRpbEKzu",
+          "name": "Daiyn Solutions Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "TEXT"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.Content }}"
+            },
+            {
+              "name": "topic_tag",
+              "value": "={{ $json.Topic }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2352,
+        -144
+      ],
+      "id": "88e427b0-7a36-4d26-a842-ca0d7ea68bec",
+      "name": "create post5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/25392038957056800/threads_publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"creation_id\": \"{{ $('create post5').item.json.id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2800,
+        -144
+      ],
+      "id": "190090e2-028c-4c25-89d2-422aa03cdb2d",
+      "name": "publish post3"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU",
+          "mode": "list",
+          "cachedResultName": "content plan infinity line",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "moderated",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1G6c1ZBR93NMnq4nNpET1lx4HRHqtEmQs_bLB_TWYZIU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('to agent2').item.json.row_number }}",
+            "Threads_id": "={{ $json.id }}",
+            "Status": "Опубликовано"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Content",
+              "displayName": "Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Column 1",
+              "displayName": "Column 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Threads_id",
+              "displayName": "Threads_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3024,
+        -144
+      ],
+      "id": "2d14db20-8b3d-4628-b819-83aa1a3f5411",
+      "name": "Update row in sheet3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "tfRLRXqkNRpbEKzu",
+          "name": "Daiyn Solutions Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.threads.net/v1.0/17929379913118453",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status,error_message"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer THAAXKmi0jZA75BUVIzQ19XcnVqUUhkQUZAKUm9NdU1hR2ZASTjY2SEdIWnZAHLU9PY3RjdlZAxMjRsRXdVaEJ5eUl2T29EeTRSTVNtTzJwempEZAVpGLXhWSGg0YUZA5dy1BVVVlaUZApYWRwYUZAKYzlCMHJLYTZAHeHJib2xzTGJWcF9Kbl9iUQZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2976,
+        -624
+      ],
+      "id": "8c4e9369-cd93-4859-a442-20b4040f493a",
+      "name": "create post6"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.threads.net/v1.0/17929393233118453",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer ВАШ_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3184,
+        -560
+      ],
+      "id": "63524fd7-ca22-4b77-ae8b-c77a4e58d76d",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3024,
+        -880
+      ],
+      "id": "fe2787f1-8b52-44fe-bebd-eb65bcb9188d",
+      "name": "Wait",
+      "webhookId": "8e9073e3-2f74-49dd-972d-eb3786941e5b"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2576,
+        -368
+      ],
+      "id": "a4ad74a0-263d-4f24-aa8f-f41fb3798aba",
+      "name": "Wait1",
+      "webhookId": "8e9073e3-2f74-49dd-972d-eb3786941e5b"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2576,
+        -144
+      ],
+      "id": "637a8f00-5bae-4124-87c5-9a17e7deb93e",
+      "name": "Wait2",
+      "webhookId": "8e9073e3-2f74-49dd-972d-eb3786941e5b"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini-2025-08-07",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini-2025-08-07"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        -16
+      ],
+      "id": "c7ab394d-ad4f-4f2c-9116-da1deb0dbf7e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "LrjiSP48xrbWMLQE",
+          "name": "infinity life prod"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini-2025-08-07",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini-2025-08-07"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2304,
+        -576
+      ],
+      "id": "6697d00d-01d3-4514-a4c0-f55aaa7e9b4b",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "LrjiSP48xrbWMLQE",
+          "name": "infinity life prod"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "create post1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "publish post1": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8am": {
+      "main": [
+        [
+          {
+            "node": "Get rows to publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6pm": {
+      "main": [
+        [
+          {
+            "node": "Get rows to publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8pm": {
+      "main": [
+        [
+          {
+            "node": "Get rows to publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "set rows and content plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "structured output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get rows to publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "to agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "to agent1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "to agent2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "publish post1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create post": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "random": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get rows to publish": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "catch post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set rows and content plan": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "structured output": {
+      "main": [
+        [
+          {
+            "node": "catch post",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "catch post": {
+      "main": [
+        [
+          {
+            "node": "final info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "final info": {
+      "main": [
+        [
+          {
+            "node": "random",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "to agent": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "create post1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "publish post": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "to agent1": {
+      "main": [
+        [
+          {
+            "node": "create post4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create post4": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "publish post2": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create post5": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "publish post3": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "to agent2": {
+      "main": [
+        [
+          {
+            "node": "create post5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "publish post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "publish post2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "publish post3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Auto-fixing Output Parser1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "84288535-552e-4ec4-98a0-6cc4497d5f3c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6389d5ac20f95dcdf1d33c550a796b703ed8615e1b9994b305204285f1b101f2"
+  },
+  "id": "nBgxXyoyPRAm5kLP",
+  "tags": []
+}

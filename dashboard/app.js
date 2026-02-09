@@ -515,5 +515,200 @@ setInterval(() => {
   }
 }, 15000);
 
+// ==========================================
+// Threads Dashboard
+// ==========================================
+let threadsCachedPosts = { new: [], validated: [], replied: [] };
+let threadsActiveTab = 'new';
+
+// Load Threads data when switching to tab
+function loadThreadsData() {
+  loadThreadsStatus();
+  loadThreadsPosts();
+  loadThreadsKeywords();
+}
+
+// Status
+async function loadThreadsStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/api/threads/status`);
+    const data = await response.json();
+
+    updateText('threadsSchedule', data.schedule?.join(', ') || '08:00, 14:00, 20:00');
+    updateText('threadsMaxReplies', data.maxRepliesPerDay || 10);
+    updateText('threadsApiRequests', data.stats?.apiRequests || 0);
+    updateText('threadsPostsFound', data.stats?.postsFound || 0);
+    updateText('threadsValidated', data.stats?.validated || 0);
+    updateText('threadsReplied', data.stats?.replied || 0);
+  } catch (error) {
+    console.error('Threads status error:', error);
+  }
+}
+
+// Posts
+async function loadThreadsPosts() {
+  try {
+    const response = await fetch(`${API_BASE}/api/threads/posts`);
+    const data = await response.json();
+
+    // Categorize posts
+    threadsCachedPosts = { new: [], validated: [], replied: [] };
+    (data.posts || []).forEach(post => {
+      if (post.status === 'new') threadsCachedPosts.new.push(post);
+      else if (post.status === 'validated') threadsCachedPosts.validated.push(post);
+      else if (post.status === 'replied') threadsCachedPosts.replied.push(post);
+    });
+
+    // Update counts
+    updateText('threadsNewCount', threadsCachedPosts.new.length);
+    updateText('threadsValidatedCount', threadsCachedPosts.validated.length);
+    updateText('threadsRepliedCount', threadsCachedPosts.replied.length);
+
+    // Render current tab
+    renderThreadsPosts(threadsActiveTab);
+  } catch (error) {
+    console.error('Threads posts error:', error);
+  }
+}
+
+function renderThreadsPosts(status) {
+  const containerId = `threads${status.charAt(0).toUpperCase() + status.slice(1)}List`;
+  const container = document.getElementById(containerId);
+  const posts = threadsCachedPosts[status] || [];
+
+  if (posts.length === 0) {
+    container.innerHTML = '<div class="empty-state">Нет постов</div>';
+    return;
+  }
+
+  container.innerHTML = posts.map(post => {
+    const time = post.created_at ? new Date(post.created_at).toLocaleString('ru-RU') : '';
+    const replyHtml = post.reply_text ? `
+      <div class="threads-post-reply">
+        <div class="threads-reply-label">💬 Наш ответ:</div>
+        <div class="threads-reply-text">${escapeHtml(post.reply_text)}</div>
+      </div>
+    ` : '';
+
+    return `
+      <div class="threads-post-item ${post.status}">
+        <div class="threads-post-header">
+          <span class="threads-post-user">@${escapeHtml(post.username || 'unknown')}</span>
+          <span class="threads-post-keyword">${escapeHtml(post.keyword_matched || '')}</span>
+        </div>
+        <div class="threads-post-text">${escapeHtml(post.text || '')}</div>
+        <div class="threads-post-footer">
+          <span class="threads-post-time">${time}</span>
+          ${post.permalink ? `<a href="${post.permalink}" target="_blank" class="threads-post-link">Открыть →</a>` : ''}
+        </div>
+        ${replyHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+// Keywords
+async function loadThreadsKeywords() {
+  try {
+    // Load from static file or use predefined list
+    const keywords = [
+      'остеопат астана', 'ищу остеопата', 'посоветуйте остеопата',
+      'невролог астана', 'невропатолог астана', 'детский невролог астана',
+      'мануальный терапевт астана', 'мануальная терапия астана',
+      'боль в спине астана', 'болит спина', 'болит поясница',
+      'грыжа позвоночника', 'межпозвоночная грыжа', 'лечение грыжи',
+      'сколиоз астана', 'сколиоз лечение', 'искривление позвоночника',
+      'артроз астана', 'боль в суставах', 'артрит лечение',
+      'зрр астана', 'зпр астана', 'задержка речи', 'аутизм астана',
+      'мрт астана', 'узи астана', 'кт астана',
+      'посоветуйте врача астана', 'посоветуйте клинику астана'
+    ];
+
+    const container = document.getElementById('threadsKeywordsList');
+    container.innerHTML = keywords.map(kw =>
+      `<span class="threads-keyword-tag">${escapeHtml(kw)}</span>`
+    ).join('');
+  } catch (error) {
+    console.error('Threads keywords error:', error);
+  }
+}
+
+// Tab switching
+function switchThreadsTab(tab) {
+  threadsActiveTab = tab;
+
+  // Update tab buttons
+  document.querySelectorAll('#platform-threads .tab').forEach(t => t.classList.remove('active'));
+  const tabIndex = ['new', 'validated', 'replied', 'keywords'].indexOf(tab);
+  document.querySelectorAll('#platform-threads .tab')[tabIndex]?.classList.add('active');
+
+  // Update content
+  document.querySelectorAll('.threads-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`threads-tab-${tab}`)?.classList.add('active');
+
+  // Render posts if needed
+  if (tab !== 'keywords') {
+    renderThreadsPosts(tab);
+  }
+}
+
+// Run search
+async function threadsRunSearch() {
+  const btn = document.getElementById('btnThreadsSearch');
+  btn.textContent = '⏳ Ищу...';
+  btn.classList.add('loading');
+
+  try {
+    await fetch(`${API_BASE}/api/threads/search`, { method: 'POST' });
+    btn.textContent = '✅ Готово!';
+    await loadThreadsData();
+
+    setTimeout(() => {
+      btn.textContent = '🔍 Запустить поиск';
+      btn.classList.remove('loading');
+    }, 2000);
+  } catch (error) {
+    btn.textContent = '❌ Ошибка';
+    setTimeout(() => {
+      btn.textContent = '🔍 Запустить поиск';
+      btn.classList.remove('loading');
+    }, 2000);
+  }
+}
+
+// Refresh
+async function threadsRefresh() {
+  await loadThreadsData();
+}
+
+// Update switchPlatform to load Threads data
+const originalSwitchPlatform = switchPlatform;
+window.switchPlatform = function (platform) {
+  activePlatform = platform;
+
+  // Update tabs
+  document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`platform${platform.charAt(0).toUpperCase() + platform.slice(1)}`).classList.add('active');
+
+  // Update content
+  document.querySelectorAll('.platform-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`platform-${platform}`).classList.add('active');
+
+  // Load data
+  if (platform === 'youtube') {
+    loadYouTubeData();
+  } else if (platform === 'threads') {
+    loadThreadsData();
+  }
+};
+
+// Refresh Threads data periodically when on Threads tab
+setInterval(() => {
+  if (activePlatform === 'threads') {
+    loadThreadsStatus();
+  }
+}, 30000);
+
 console.log('🚀 INFINITY LIFE Dashboard v3 initialized');
 console.log('📺 YouTube Dashboard enabled');
+console.log('🧵 Threads Dashboard enabled');
