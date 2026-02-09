@@ -7,10 +7,37 @@ const { createClient } = require('@supabase/supabase-js');
 
 class ThreadsDatabase {
     constructor() {
-        this.supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_KEY
-        );
+        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+            console.error('[Threads DB] Missing Supabase credentials');
+            this.supabase = null;
+            return;
+        }
+
+        try {
+            this.supabase = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_KEY,
+                {
+                    auth: { persistSession: false },
+                    global: {
+                        fetch: (...args) => {
+                            return fetch(...args).catch(err => {
+                                console.error('[Threads DB] Fetch error:', err.message);
+                                throw err;
+                            });
+                        }
+                    }
+                }
+            );
+            console.log('[Threads DB] Connected to Supabase');
+        } catch (error) {
+            console.error('[Threads DB] Init error:', error.message);
+            this.supabase = null;
+        }
+    }
+
+    isConnected() {
+        return this.supabase !== null;
     }
 
     /**
@@ -151,6 +178,19 @@ class ThreadsDatabase {
      * @returns {Promise<Object>}
      */
     async getStats() {
+        if (!this.isConnected()) {
+            console.log('[Threads DB] Not connected, returning zeros');
+            return {
+                apiRequests: 0,
+                postsFound: 0,
+                newPosts: 0,
+                validated: 0,
+                replied: 0,
+                skipped: 0,
+                conversionRate: 0
+            };
+        }
+
         // Total counts from processed posts
         const { count: totalPosts } = await this.supabase
             .from('threads_processed_posts')
@@ -202,6 +242,10 @@ class ThreadsDatabase {
      * @returns {Promise<Object>}
      */
     async getChartData() {
+        if (!this.isConnected()) {
+            return {};
+        }
+
         const days = {};
         const now = new Date();
 
