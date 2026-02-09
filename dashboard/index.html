@@ -26,6 +26,9 @@
         <button class="platform-tab" onclick="switchPlatform('threads')" id="platformThreads">
           <span>🧵</span> Threads
         </button>
+        <button class="platform-tab" onclick="switchPlatform('google')" id="platformGoogle">
+          <span>📍</span> Google
+        </button>
       </div>
     </header>
 
@@ -104,6 +107,10 @@
       <div class="tab-content" id="tab-users">
         <div class="section">
           <h2 class="section-title">👥 Управление пользователями</h2>
+          <div class="search-container" style="margin-bottom: 15px;">
+            <input type="text" id="userSearchInput" placeholder="🔍 Поиск по имени..." oninput="filterUsers(this.value)"
+              style="width: 100%; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; outline: none;">
+          </div>
           <div class="users-list" id="usersList">
             <div class="empty-state">Загрузка...</div>
           </div>
@@ -316,6 +323,74 @@
       </div>
 
     </div> <!-- End Threads Dashboard -->
+
+    <!-- Google Reviews Dashboard -->
+    <div class="platform-content" id="platform-google">
+      <div class="subtitle">Google Maps Reviews</div>
+
+      <!-- Google Status Bar -->
+      <div class="google-status-bar" id="googleStatusBar">
+        <div class="google-status-item">
+          <span class="google-status-dot" id="googleAuthDot"></span>
+          <span id="googleAuthStatus">Загрузка...</span>
+        </div>
+        <div class="google-status-item">
+          <span>📍</span>
+          <span>Location: <span id="googleLocationId">-</span></span>
+        </div>
+        <div class="google-status-item">
+          <span>📊</span>
+          <span>Отвечено: <span id="googleRepliedCount">0</span></span>
+        </div>
+      </div>
+
+      <!-- Google Controls -->
+      <div class="controls">
+        <button class="btn-run google-btn" id="btnGoogleDryRun" onclick="googleDryRun()">
+          🔍 Preview ответов
+        </button>
+        <button class="btn-secondary google-btn-send" id="btnGoogleSend" onclick="googleSendOne()">
+          ✉️ Отправить 1 ответ (тест)
+        </button>
+        <button class="btn-secondary" onclick="googleRefresh()">
+          🔄 Обновить
+        </button>
+      </div>
+
+      <!-- Google Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card google-card" onclick="googleFilterReviews('all')">
+          <div class="stat-icon">⭐</div>
+          <div class="stat-value" id="googleTotalReviews">0</div>
+          <div class="stat-label">Всего отзывов</div>
+        </div>
+        <div class="stat-card google-card" onclick="googleFilterReviews('pending')">
+          <div class="stat-icon">⏳</div>
+          <div class="stat-value" id="googlePendingReviews">0</div>
+          <div class="stat-label">Без ответа</div>
+        </div>
+        <div class="stat-card google-card" onclick="googleFilterReviews('replied')">
+          <div class="stat-icon">✅</div>
+          <div class="stat-value" id="googleRepliedReviews">0</div>
+          <div class="stat-label">С ответом</div>
+        </div>
+      </div>
+
+      <!-- Google Reviews List -->
+      <div class="section">
+        <h2 class="section-title">📝 Отзывы Google Maps</h2>
+        <div class="google-reviews-list" id="googleReviewsList">
+          <div class="empty-state">Загрузка...</div>
+        </div>
+      </div>
+
+      <!-- Generated Responses Preview -->
+      <div class="section" id="googlePreviewSection" style="display: none;">
+        <h2 class="section-title">🤖 Сгенерированные ответы (Preview)</h2>
+        <div class="google-preview-list" id="googlePreviewList">
+        </div>
+      </div>
+    </div> <!-- End Google Dashboard -->
 
   </div>
 

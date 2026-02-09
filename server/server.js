@@ -16,6 +16,7 @@ const youtubeHandler = require('./handlers/youtube');
 // Google Business Profile services
 const googleBusinessOAuth = require('./services/google-business-oauth');
 const googleBusinessAPI = require('./services/google-business-api');
+const googleReviewsHandler = require('./handlers/google-reviews');
 
 // Threads Keyword Search services
 const threadsKeywordSearch = require('./services/threads-keyword-search');
@@ -188,25 +189,35 @@ app.post('/webhook', (req, res) => {
 });
 
 // API endpoints for dashboard
-app.get('/api/stats', (req, res) => {
-  const instagramStats = statsManager.getInstagramStats();
-  res.json({
-    totalMessages: instagramStats.totalMessages,
-    totalComments: instagramStats.totalComments,
-    responsesSet: instagramStats.responsesSet,
-    lastProcessed: instagramStats.lastUpdated,
-    uniqueDMSenders: instagramStats.uniqueDMSenders,
-    uniqueCommenters: instagramStats.uniqueCommenters,
-    dailyStats: instagramStats.dailyStats,
-    bufferSize: {
-      comments: buffer.comments.length,
-      dms: buffer.dms.length
-    }
-  });
+app.get('/api/stats', async (req, res) => {
+  try {
+    const instagramStats = await statsManager.getInstagramStats();
+    res.json({
+      totalMessages: instagramStats.totalMessages,
+      totalComments: instagramStats.totalComments,
+      responsesSet: instagramStats.responsesSet,
+      lastProcessed: instagramStats.lastUpdated,
+      uniqueDMSenders: instagramStats.uniqueDMSenders,
+      uniqueCommenters: instagramStats.uniqueCommenters,
+      dailyStats: instagramStats.dailyStats,
+      bufferSize: {
+        comments: buffer.comments.length,
+        dms: buffer.dms.length
+      }
+    });
+  } catch (error) {
+    console.error('[API] Error getting stats:', error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/api/history', (req, res) => {
-  res.json(statsManager.getInstagramHistory().slice().reverse());
+app.get('/api/history', async (req, res) => {
+  try {
+    const history = await statsManager.getInstagramHistory();
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/api/buffer', (req, res) => {
@@ -233,35 +244,55 @@ app.post('/api/process-now', async (req, res) => {
 });
 
 // User management API
-app.get('/api/users', (req, res) => {
-  const users = userManager.getAllUsers();
-  res.json(users);
-});
-
-app.get('/api/users/:id', (req, res) => {
-  const user = userManager.getUser(req.params.id);
-  res.json(user);
-});
-
-app.post('/api/users/:id/toggle-ai', (req, res) => {
-  const { type } = req.body; // 'dm', 'comment', or 'all'
-  const user = userManager.toggleAI(req.params.id, type || 'all');
-  if (user) {
-    console.log(`[Toggle] User ${req.params.id}: AI ${type || 'all'} = ${user.aiEnabled}`);
-    res.json({ status: 'ok', user });
-  } else {
-    res.status(404).json({ status: 'error', message: 'User not found' });
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await userManager.getAllUsers();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/users/:id/conversation', (req, res) => {
-  const history = userManager.getConversation(req.params.id);
-  res.json(history);
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const user = await userManager.getUser(req.params.id);
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.delete('/api/users/:id/conversation', (req, res) => {
-  userManager.clearConversation(req.params.id);
-  res.json({ status: 'ok' });
+app.post('/api/users/:id/toggle-ai', async (req, res) => {
+  try {
+    const { type } = req.body;
+    const user = await userManager.toggleAI(req.params.id, type || 'all');
+    if (user) {
+      console.log(`[Toggle] User ${req.params.id}: AI ${type || 'all'} = ${user.ai_enabled}`);
+      res.json({ status: 'ok', user });
+    } else {
+      res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/users/:id/conversation', async (req, res) => {
+  try {
+    const history = await userManager.getConversation(req.params.id);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/users/:id/conversation', async (req, res) => {
+  try {
+    await userManager.clearConversation(req.params.id);
+    res.json({ status: 'ok' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ==========================================
@@ -307,20 +338,25 @@ app.get('/auth/youtube/callback', async (req, res) => {
 });
 
 // YouTube status check
-app.get('/api/youtube/status', (req, res) => {
-  const ytStats = statsManager.getYouTubeStats();
-  res.json({
-    authorized: youtubeOAuth.isAuthorized(),
-    channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
-    pollingInterval: YOUTUBE_POLL_INTERVAL / 1000 / 60 + ' minutes',
-    stats: {
-      ...youtubeHandler.getStats(),
-      totalComments: ytStats.totalComments,
-      totalResponses: ytStats.totalResponses,
-      lastProcessed: youtubeLastProcessed || ytStats.lastUpdated,
-      processedVideos: ytStats.processedVideos
-    }
-  });
+app.get('/api/youtube/status', async (req, res) => {
+  try {
+    const ytStats = await statsManager.getYouTubeStats();
+    res.json({
+      authorized: youtubeOAuth.isAuthorized(),
+      channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
+      pollingInterval: YOUTUBE_POLL_INTERVAL / 1000 / 60 + ' minutes',
+      stats: {
+        ...youtubeHandler.getStats(),
+        totalComments: ytStats.totalComments,
+        totalResponses: ytStats.totalResponses,
+        lastProcessed: youtubeLastProcessed || ytStats.lastUpdated,
+        processedVideos: ytStats.processedVideos
+      }
+    });
+  } catch (error) {
+    console.error('[API] Error getting YouTube stats:', error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // YouTube history
@@ -509,6 +545,57 @@ app.delete('/api/google/reviews/reply', async (req, res) => {
     const result = await googleBusinessAPI.deleteReply(reviewName);
     res.json({ status: 'ok', result });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Auto-reply to all reviews (dry run by default)
+app.post('/api/google/reviews/auto-reply', async (req, res) => {
+  try {
+    const { dryRun = true, forceReply = false, limit = null } = req.body;
+    console.log(`[Google Reviews] Auto-reply triggered (dryRun: ${dryRun}, forceReply: ${forceReply}, limit: ${limit})`);
+
+    const result = await googleReviewsHandler.processReviews({ dryRun, forceReply, limit });
+    res.json({ status: 'ok', ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get auto-reply stats
+app.get('/api/google/reviews/stats', (req, res) => {
+  const stats = googleReviewsHandler.getStats();
+  res.json(stats);
+});
+
+// Clear replied cache (for testing)
+app.post('/api/google/reviews/clear-cache', (req, res) => {
+  googleReviewsHandler.clearCache();
+  res.json({ status: 'ok', message: 'Cache cleared' });
+});
+
+// Reply to single review with AI
+app.post('/api/google/reviews/reply-single', async (req, res) => {
+  try {
+    const { reviewName, review } = req.body;
+    if (!reviewName || !review) {
+      return res.status(400).json({ error: 'reviewName and review are required' });
+    }
+
+    // Import responder to generate reply
+    const googleReviewsResponder = require('./services/google-reviews-responder');
+
+    // Generate AI response
+    const replyText = await googleReviewsResponder.generateResponse(review);
+    console.log(`[Google Reviews] Generated reply for ${review.reviewer?.displayName}: "${replyText.substring(0, 50)}..."`);
+
+    // Post reply
+    await googleBusinessAPI.replyToReview(reviewName, replyText);
+    console.log(`[Google Reviews] ✅ Reply posted to ${reviewName}`);
+
+    res.json({ status: 'ok', reply: replyText });
+  } catch (error) {
+    console.error('[Google Reviews] Reply single error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

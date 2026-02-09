@@ -264,6 +264,30 @@ async function toggleAI(userId, type) {
   }
 }
 
+// Filter users by search query
+function filterUsers(query) {
+  const container = document.getElementById('usersList');
+  if (!cachedUsers || cachedUsers.length === 0) {
+    container.innerHTML = '<div class="empty-state">Пока нет пользователей</div>';
+    return;
+  }
+
+  const searchTerm = query.toLowerCase().trim();
+  const filteredUsers = cachedUsers.filter(user => {
+    const username = (user.username || user.id || '').toLowerCase();
+    const name = (user.name || '').toLowerCase();
+    return username.includes(searchTerm) || name.includes(searchTerm);
+  });
+
+  if (filteredUsers.length === 0) {
+    container.innerHTML = `<div class="empty-state">Не найдено: "${escapeHtml(query)}"</div>`;
+    return;
+  }
+
+  container.innerHTML = filteredUsers.sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen))
+    .map(renderUserItem).join('');
+}
+
 // Chart
 function initChart() {
   const ctx = document.getElementById('statsChart').getContext('2d');
@@ -785,3 +809,346 @@ function updateThreadsChart(chartData) {
 console.log('🚀 INFINITY LIFE Dashboard v3 initialized');
 console.log('📺 YouTube Dashboard enabled');
 console.log('🧵 Threads Dashboard enabled');
+
+// ==========================================
+// Google Reviews Dashboard
+// ==========================================
+let googleCachedReviews = [];
+let googlePreviewData = [];
+
+// Load Google data when switching to tab
+function loadGoogleData() {
+  loadGoogleStatus();
+  loadGoogleReviews();
+}
+
+// Status
+async function loadGoogleStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/api/google/status`);
+    const data = await response.json();
+
+    const dot = document.getElementById('googleAuthDot');
+    const status = document.getElementById('googleAuthStatus');
+
+    if (data.authorized) {
+      dot?.classList.add('authorized');
+      if (status) status.textContent = 'Авторизован ✅';
+    } else {
+      dot?.classList.remove('authorized');
+      if (status) status.textContent = 'Не авторизован ❌';
+    }
+
+    updateText('googleLocationId', data.locationId || '-');
+
+    // Load reply stats
+    const statsResponse = await fetch(`${API_BASE}/api/google/reviews/stats`);
+    const stats = await statsResponse.json();
+    updateText('googleRepliedCount', stats.totalReplied || 0);
+  } catch (error) {
+    console.error('Google status error:', error);
+  }
+}
+
+// Reviews
+async function loadGoogleReviews() {
+  try {
+    const response = await fetch(`${API_BASE}/api/google/reviews`);
+    const data = await response.json();
+    googleCachedReviews = data.reviews || [];
+
+    const container = document.getElementById('googleReviewsList');
+
+    // Count stats
+    const totalReviews = googleCachedReviews.length;
+    const repliedReviews = googleCachedReviews.filter(r => r.reviewReply).length;
+    const pendingReviews = totalReviews - repliedReviews;
+
+    updateText('googleTotalReviews', totalReviews);
+    updateText('googlePendingReviews', pendingReviews);
+    updateText('googleRepliedReviews', repliedReviews);
+
+    if (googleCachedReviews.length === 0) {
+      container.innerHTML = '<div class="empty-state">Нет отзывов</div>';
+      return;
+    }
+
+    container.innerHTML = googleCachedReviews.slice(0, 20).map(review => {
+      const hasReply = !!review.reviewReply;
+      const stars = getStarsHtml(review.starRating);
+      const date = review.createTime ? new Date(review.createTime).toLocaleDateString('ru-RU') : '';
+      const avatarUrl = review.reviewer?.profilePhotoUrl || '';
+
+      return `
+        <div class="google-review-item ${hasReply ? 'has-reply' : 'no-reply'}">
+          <div class="google-review-header">
+            <div class="google-review-author">
+              ${avatarUrl ? `<img class="google-review-avatar" src="${avatarUrl}" alt="" onerror="this.style.display='none'">` : ''}
+              <span class="google-review-name">${escapeHtml(review.reviewer?.displayName || 'Анонимный')}</span>
+            </div>
+            <div>
+              <span class="google-review-stars">${stars}</span>
+              <span class="google-review-date">${date}</span>
+            </div>
+          </div>
+          <div class="google-review-text">${escapeHtml(review.comment || '(Без текста)')}</div>
+          ${hasReply ? `
+            <div class="google-review-reply">
+              <div class="google-review-reply-header">💬 Ответ клиники:</div>
+              <div class="google-review-reply-text">${escapeHtml(review.reviewReply.comment)}</div>
+            </div>
+          ` : `
+            <button class="google-reply-btn" onclick="googleGenerateOneReply('${review.reviewId}')">
+              🤖 Сгенерировать ответ
+            </button>
+          `}
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    console.error('Google reviews error:', error);
+    document.getElementById('googleReviewsList').innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+  }
+}
+
+function getStarsHtml(rating) {
+  const count = { 'FIVE': 5, 'FOUR': 4, 'THREE': 3, 'TWO': 2, 'ONE': 1 }[rating] || 0;
+  return '⭐'.repeat(count);
+}
+
+// Dry run - preview generated responses
+async function googleDryRun() {
+  const btn = document.getElementById('btnGoogleDryRun');
+  btn.textContent = '⏳ Генерирую...';
+  btn.classList.add('loading');
+
+  try {
+    const response = await fetch(`${API_BASE}/api/google/reviews/auto-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dryRun: true })
+    });
+    const data = await response.json();
+    googlePreviewData = data.results || [];
+
+    // Show preview section
+    const previewSection = document.getElementById('googlePreviewSection');
+    const previewList = document.getElementById('googlePreviewList');
+
+    // Filter only items that would get a response
+    const previewItems = googlePreviewData.filter(r => r.generatedReply);
+
+    if (previewItems.length === 0) {
+      previewList.innerHTML = '<div class="empty-state">Нет отзывов для ответа (все уже имеют ответы)</div>';
+    } else {
+      previewList.innerHTML = previewItems.slice(0, 10).map(item => `
+        <div class="google-preview-item">
+          <div class="google-preview-header">
+            <span><strong>${escapeHtml(item.reviewer)}</strong> ${getStarsHtml(item.starRating)}</span>
+            <span class="google-preview-label">PREVIEW</span>
+          </div>
+          <div class="google-preview-original">"${escapeHtml(item.comment || '')}"</div>
+          <div class="google-preview-generated">${escapeHtml(item.generatedReply)}</div>
+        </div>
+      `).join('');
+    }
+
+    previewSection.style.display = 'block';
+    btn.textContent = '✅ Готово!';
+
+    setTimeout(() => {
+      btn.textContent = '🔍 Preview ответов';
+      btn.classList.remove('loading');
+    }, 2000);
+  } catch (error) {
+    console.error('Google dry run error:', error);
+    btn.textContent = '❌ Ошибка';
+    setTimeout(() => {
+      btn.textContent = '🔍 Preview ответов';
+      btn.classList.remove('loading');
+    }, 2000);
+  }
+}
+
+// Send one reply (test)
+async function googleSendOne() {
+  const btn = document.getElementById('btnGoogleSend');
+  btn.textContent = '⏳ Отправляю...';
+  btn.classList.add('loading');
+
+  try {
+    // Find one review without reply
+    const reviewWithoutReply = googleCachedReviews.find(r => !r.reviewReply && r.comment);
+
+    if (!reviewWithoutReply) {
+      alert('Нет отзывов без ответа!');
+      btn.textContent = '✉️ Отправить 1 ответ (тест)';
+      btn.classList.remove('loading');
+      return;
+    }
+
+    // This will process just one review
+    const response = await fetch(`${API_BASE}/api/google/reviews/auto-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dryRun: false, limit: 1 })
+    });
+
+    const data = await response.json();
+
+    btn.textContent = `✅ Отправлено! (${data.repliedCount || 0})`;
+    await loadGoogleReviews();
+
+    setTimeout(() => {
+      btn.textContent = '✉️ Отправить 1 ответ (тест)';
+      btn.classList.remove('loading');
+    }, 3000);
+  } catch (error) {
+    console.error('Google send error:', error);
+    btn.textContent = '❌ Ошибка';
+    setTimeout(() => {
+      btn.textContent = '✉️ Отправить 1 ответ (тест)';
+      btn.classList.remove('loading');
+    }, 2000);
+  }
+}
+
+// Generate reply for specific review
+async function googleGenerateOneReply(reviewId) {
+  alert('Функция в разработке. Используйте кнопку "Preview ответов" для генерации.');
+}
+
+// Refresh
+function googleRefresh() {
+  loadGoogleData();
+}
+
+// Update switchPlatform to include Google
+const platformSwitchOriginal = window.switchPlatform;
+window.switchPlatform = function (platform) {
+  activePlatform = platform;
+
+  // Update tabs
+  document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`platform${platform.charAt(0).toUpperCase() + platform.slice(1)}`).classList.add('active');
+
+  // Update content
+  document.querySelectorAll('.platform-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`platform-${platform}`).classList.add('active');
+
+  // Load data
+  if (platform === 'youtube') {
+    loadYouTubeData();
+  } else if (platform === 'threads') {
+    loadThreadsData();
+  } else if (platform === 'google') {
+    loadGoogleData();
+  }
+};
+
+// Refresh Google data periodically when on Google tab
+setInterval(() => {
+  if (activePlatform === 'google') {
+    loadGoogleStatus();
+  }
+}, 30000);
+
+// Filter reviews by status (clicking on stat cards)
+let googleCurrentFilter = 'all';
+
+function googleFilterReviews(filter) {
+  googleCurrentFilter = filter;
+
+  const container = document.getElementById('googleReviewsList');
+  let filteredReviews = googleCachedReviews;
+
+  if (filter === 'pending') {
+    filteredReviews = googleCachedReviews.filter(r => !r.reviewReply);
+  } else if (filter === 'replied') {
+    filteredReviews = googleCachedReviews.filter(r => r.reviewReply);
+  }
+
+  // Update section title
+  const titles = {
+    'all': '📝 Все отзывы',
+    'pending': '⏳ Отзывы без ответа',
+    'replied': '✅ Отзывы с ответом'
+  };
+
+  const sectionTitle = document.querySelector('#platform-google .section-title');
+  if (sectionTitle) {
+    sectionTitle.textContent = titles[filter] || '📝 Отзывы Google Maps';
+  }
+
+  if (filteredReviews.length === 0) {
+    container.innerHTML = '<div class="empty-state">Нет отзывов в этой категории</div>';
+    return;
+  }
+
+  container.innerHTML = filteredReviews.slice(0, 20).map(review => {
+    const hasReply = !!review.reviewReply;
+    const stars = getStarsHtml(review.starRating);
+    const date = review.createTime ? new Date(review.createTime).toLocaleDateString('ru-RU') : '';
+    const avatarUrl = review.reviewer?.profilePhotoUrl || '';
+
+    return `
+      <div class="google-review-item ${hasReply ? 'has-reply' : 'no-reply'}">
+        <div class="google-review-header">
+          <div class="google-review-author">
+            ${avatarUrl ? `<img class="google-review-avatar" src="${avatarUrl}" alt="" onerror="this.style.display='none'">` : ''}
+            <span class="google-review-name">${escapeHtml(review.reviewer?.displayName || 'Анонимный')}</span>
+          </div>
+          <div>
+            <span class="google-review-stars">${stars}</span>
+            <span class="google-review-date">${date}</span>
+          </div>
+        </div>
+        <div class="google-review-text">${escapeHtml(review.comment || '(Без текста)')}</div>
+        ${hasReply ? `
+          <div class="google-review-reply">
+            <div class="google-review-reply-header">💬 Ответ клиники:</div>
+            <div class="google-review-reply-text">${escapeHtml(review.reviewReply.comment)}</div>
+          </div>
+        ` : `
+          <button class="google-reply-btn" onclick="googleReplyToReview('${review.name}', '${escapeHtml(review.comment || '')}', '${review.starRating}')">
+            🤖 Ответить
+          </button>
+        `}
+      </div>
+    `;
+  }).join('');
+}
+
+// Reply to specific review
+async function googleReplyToReview(reviewName, comment, starRating) {
+  if (!confirm('Сгенерировать и отправить ответ на этот отзыв?')) return;
+
+  const review = googleCachedReviews.find(r => r.name === reviewName);
+  if (!review) {
+    alert('Отзыв не найден');
+    return;
+  }
+
+  try {
+    // Generate response via API
+    const response = await fetch(`${API_BASE}/api/google/reviews/reply-single`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewName, review })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Unknown error');
+    }
+
+    const data = await response.json();
+    alert(`✅ Ответ отправлен!\n\n${data.reply}`);
+    await loadGoogleReviews();
+  } catch (error) {
+    console.error('Reply error:', error);
+    alert(`❌ Ошибка: ${error.message}`);
+  }
+}
+
+console.log('📍 Google Reviews Dashboard enabled');

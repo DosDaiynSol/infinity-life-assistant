@@ -1,6 +1,7 @@
 const { OpenAI } = require('openai');
 const instagramApi = require('../services/instagram-api');
 const userManager = require('../services/user-manager');
+const instagramDB = require('../services/instagram-database');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -113,12 +114,14 @@ async function handleCommentBatch(comments) {
 
     for (const comment of comments) {
         try {
-            // Track user activity
-            userManager.trackActivity(comment.userId, 'comment', comment.username);
+            // Track user activity (now async)
+            await userManager.trackActivity(comment.userId, 'comment', comment.username);
 
-            // Check if AI is enabled for this user
-            if (!userManager.isAIEnabled(comment.userId, 'comment')) {
-                results.push({
+            // Check if AI is enabled for this user (now async)
+            const aiEnabled = await userManager.isAIEnabled(comment.userId, 'comment');
+            if (!aiEnabled) {
+                const result = {
+                    type: 'comment',
                     commentId: comment.commentId,
                     username: comment.username,
                     userId: comment.userId,
@@ -127,7 +130,9 @@ async function handleCommentBatch(comments) {
                     responded: false,
                     rejection: REJECTION_REASONS.AI_DISABLED,
                     status: 'skipped'
-                });
+                };
+                results.push(result);
+                await instagramDB.addHistory(result);
                 console.log(`[Comment] AI disabled for @${comment.username}`);
                 continue;
             }
@@ -135,7 +140,8 @@ async function handleCommentBatch(comments) {
             // Quick filter
             const filterResult = quickFilter(comment);
             if (!filterResult.pass) {
-                results.push({
+                const result = {
+                    type: 'comment',
                     commentId: comment.commentId,
                     username: comment.username,
                     userId: comment.userId,
@@ -144,7 +150,9 @@ async function handleCommentBatch(comments) {
                     responded: false,
                     rejection: filterResult.reason,
                     status: 'skipped'
-                });
+                };
+                results.push(result);
+                await instagramDB.addHistory(result);
                 console.log(`[Comment] Skipped @${comment.username}: ${filterResult.reason.label}`);
                 continue;
             }
@@ -153,7 +161,8 @@ async function handleCommentBatch(comments) {
             const relevant = await llmEvaluate(comment.text);
 
             if (!relevant) {
-                results.push({
+                const result = {
+                    type: 'comment',
                     commentId: comment.commentId,
                     username: comment.username,
                     userId: comment.userId,
@@ -162,7 +171,9 @@ async function handleCommentBatch(comments) {
                     responded: false,
                     rejection: REJECTION_REASONS.LLM_NO,
                     status: 'skipped'
-                });
+                };
+                results.push(result);
+                await instagramDB.addHistory(result);
                 console.log(`[Comment] LLM rejected @${comment.username}: not relevant`);
                 continue;
             }
@@ -171,7 +182,8 @@ async function handleCommentBatch(comments) {
             const responseText = TEMPLATE_RESPONSE(comment.username || 'user');
             const sent = await instagramApi.replyToComment(comment.commentId, responseText);
 
-            results.push({
+            const result = {
+                type: 'comment',
                 commentId: comment.commentId,
                 username: comment.username,
                 userId: comment.userId,
@@ -180,13 +192,16 @@ async function handleCommentBatch(comments) {
                 responded: sent,
                 rejection: null,
                 status: sent ? 'sent' : 'error'
-            });
+            };
+            results.push(result);
+            await instagramDB.addHistory(result);
 
             console.log(`[Comment Reply] To @${comment.username}: ${responseText}`);
 
         } catch (error) {
             console.error(`[Comment Error] ${comment.commentId}:`, error.message);
-            results.push({
+            const errorResult = {
+                type: 'comment',
                 commentId: comment.commentId,
                 username: comment.username,
                 userId: comment.userId,
@@ -194,7 +209,9 @@ async function handleCommentBatch(comments) {
                 error: error.message,
                 responded: false,
                 status: 'error'
-            });
+            };
+            results.push(errorResult);
+            await instagramDB.addHistory(errorResult);
         }
     }
 

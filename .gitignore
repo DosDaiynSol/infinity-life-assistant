@@ -4,3 +4,5 @@ node_modules/
 .DS_Store
 data/youtube_tokens.json
 data/*_stats.json
+data/google_business_tokens.json
+data/youtube_tokens.json

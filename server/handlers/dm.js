@@ -1,6 +1,7 @@
 const { OpenAI } = require('openai');
 const instagramApi = require('../services/instagram-api');
 const userManager = require('../services/user-manager');
+const instagramDB = require('../services/instagram-database');
 const clinicData = require('../data/clinic_data.json');
 
 const openai = new OpenAI({
@@ -70,8 +71,8 @@ User: "Есть ли МРТ?"
  */
 async function generateDMResponse(userId, newMessages) {
     try {
-        // Get conversation history
-        const history = userManager.getConversation(userId, 10);
+        // Get conversation history (now async)
+        const history = await userManager.getConversation(userId, 10);
 
         // Build messages array for OpenAI
         const messages = [
@@ -91,7 +92,7 @@ async function generateDMResponse(userId, newMessages) {
         messages.push({ role: 'user', content: userText });
 
         // Save user message to memory
-        userManager.addMessage(userId, 'user', userText);
+        await userManager.addMessage(userId, 'user', userText);
 
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
@@ -103,7 +104,7 @@ async function generateDMResponse(userId, newMessages) {
         const reply = response.choices[0]?.message?.content?.trim();
 
         // Save assistant reply to memory
-        userManager.addMessage(userId, 'assistant', reply);
+        await userManager.addMessage(userId, 'assistant', reply);
 
         return reply;
 
@@ -132,33 +133,41 @@ async function handleDMBatch(dms) {
     // Process each user's messages
     for (const [senderId, userDMs] of Object.entries(dmsByUser)) {
         try {
-            // Get existing user or create new one
-            let user = userManager.getUser(senderId);
+            // Get existing user or create new one (now async)
+            let user = await userManager.getUser(senderId);
 
             // If user doesn't have username, try to fetch it
             if (!user.username) {
                 console.log(`[DM] Fetching username for ${senderId}...`);
                 const profile = await instagramApi.getUserProfile(senderId);
                 if (profile?.username) {
-                    userManager.updateUser(senderId, { username: profile.username, name: profile.name });
+                    await userManager.updateUser(senderId, { username: profile.username, name: profile.name });
                     console.log(`[DM] Got username: @${profile.username}`);
+                    user.username = profile.username;
                 }
             }
 
             // Track user activity
-            userManager.trackActivity(senderId, 'dm');
+            await userManager.trackActivity(senderId, 'dm', user.username);
 
-            // Check if AI is enabled for this user
-            if (!userManager.isAIEnabled(senderId, 'dm')) {
-                results.push({
+            // Check if AI is enabled for this user (now async)
+            const aiEnabled = await userManager.isAIEnabled(senderId, 'dm');
+            if (!aiEnabled) {
+                const result = {
                     senderId,
                     username: user.username,
-                    messages: userDMs.map(dm => dm.text),
+                    text: userDMs.map(dm => dm.text).join('\n'),
                     response: null,
                     responded: false,
                     rejection: { code: 'ai_disabled', label: 'ИИ отключен', icon: '🚫' },
-                    status: 'skipped'
-                });
+                    status: 'skipped',
+                    type: 'dm'
+                };
+                results.push(result);
+
+                // Save to history
+                await instagramDB.addHistory(result);
+
                 console.log(`[DM] AI disabled for ${user.username || senderId}`);
                 continue;
             }
@@ -170,29 +179,39 @@ async function handleDMBatch(dms) {
             const sent = await instagramApi.sendDirectMessage(senderId, responseText);
 
             // Refresh user to get latest data
-            user = userManager.getUser(senderId);
+            user = await userManager.getUser(senderId);
 
-            results.push({
+            const result = {
                 senderId,
                 username: user.username,
-                messages: userDMs.map(dm => dm.text),
+                text: userDMs.map(dm => dm.text).join('\n'),
                 response: responseText,
                 responded: sent,
                 rejection: null,
-                status: sent ? 'sent' : 'error'
-            });
+                status: sent ? 'sent' : 'error',
+                type: 'dm'
+            };
+            results.push(result);
+
+            // Save to history in Supabase
+            await instagramDB.addHistory(result);
 
             console.log(`[DM Reply] To ${user.username || senderId}: ${responseText.substring(0, 80)}...`);
 
         } catch (error) {
             console.error(`[DM Error] ${senderId}:`, error.message);
-            results.push({
+            const errorResult = {
                 senderId,
-                messages: userDMs.map(dm => dm.text),
+                text: userDMs.map(dm => dm.text).join('\n'),
                 error: error.message,
                 responded: false,
-                status: 'error'
-            });
+                status: 'error',
+                type: 'dm'
+            };
+            results.push(errorResult);
+
+            // Save error to history
+            await instagramDB.addHistory(errorResult);
         }
     }
 
