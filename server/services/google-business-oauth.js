@@ -15,10 +15,21 @@ class GoogleBusinessOAuth {
 
     loadTokens() {
         try {
+            // First try to load from file
             if (fs.existsSync(TOKEN_FILE)) {
                 const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
                 console.log('[Google Business OAuth] Tokens loaded from file');
                 return data;
+            }
+
+            // Fallback to environment variables (for Railway deployment)
+            if (process.env.GOOGLE_REFRESH_TOKEN) {
+                console.log('[Google Business OAuth] Tokens loaded from environment variables');
+                return {
+                    access_token: process.env.GOOGLE_ACCESS_TOKEN || null,
+                    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+                    expires_at: 0 // Will trigger refresh on first use
+                };
             }
         } catch (error) {
             console.error('[Google Business OAuth] Error loading tokens:', error.message);

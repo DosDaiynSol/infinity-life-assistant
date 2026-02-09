@@ -15,10 +15,21 @@ class YouTubeOAuth {
 
     loadTokens() {
         try {
+            // First try to load from file
             if (fs.existsSync(TOKEN_FILE)) {
                 const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
                 console.log('[YouTube OAuth] Tokens loaded from file');
                 return data;
+            }
+
+            // Fallback to environment variables (for Railway deployment)
+            if (process.env.YOUTUBE_REFRESH_TOKEN) {
+                console.log('[YouTube OAuth] Tokens loaded from environment variables');
+                return {
+                    access_token: process.env.YOUTUBE_ACCESS_TOKEN || null,
+                    refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                    expires_at: 0 // Will trigger refresh on first use
+                };
             }
         } catch (error) {
             console.error('[YouTube OAuth] Error loading tokens:', error.message);
