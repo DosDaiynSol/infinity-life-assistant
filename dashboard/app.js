@@ -537,7 +537,7 @@ setInterval(() => {
     loadYouTubeStatus();
     loadYouTubeHistory();
   }
-}, 15000);
+}, 60000);
 
 // ==========================================
 // Threads Dashboard
@@ -742,7 +742,7 @@ setInterval(() => {
   if (activePlatform === 'threads') {
     loadThreadsStatus();
   }
-}, 30000);
+}, 60000);
 
 // Threads Chart
 let threadsChart = null;
@@ -1051,7 +1051,7 @@ setInterval(() => {
   if (activePlatform === 'google') {
     loadGoogleStatus();
   }
-}, 30000);
+}, 60000);
 
 // Filter reviews by status (clicking on stat cards)
 let googleCurrentFilter = 'all';

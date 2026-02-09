@@ -63,7 +63,10 @@ class ThreadsKeywordSearch {
     getAllKeywords() {
         const allKeywords = [];
         for (const category of Object.values(keywordsData.keywords)) {
-            allKeywords.push(...category.items);
+            // Check if category is an object with items array
+            if (category && Array.isArray(category.items)) {
+                allKeywords.push(...category.items);
+            }
         }
         return allKeywords;
     }
