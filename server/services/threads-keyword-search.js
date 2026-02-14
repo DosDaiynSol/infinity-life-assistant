@@ -16,9 +16,10 @@ const EventEmitter = require('events');
 // Load keywords with multiple path fallbacks
 let keywordsData;
 const keywordsPaths = [
+    path.join(__dirname, '../data/threads_keywords.json'),
     path.join(__dirname, '../../data/threads_keywords.json'),
     path.join(process.cwd(), 'data/threads_keywords.json'),
-    path.resolve('data/threads_keywords.json')
+    path.join(process.cwd(), 'server/data/threads_keywords.json')
 ];
 let keywordsLoaded = false;
 for (const kp of keywordsPaths) {
@@ -59,9 +60,10 @@ if (!keywordsLoaded) {
 // Load clinic data with fallback
 let clinicData;
 const clinicPaths = [
+    path.join(__dirname, '../data/clinic_data.json'),
     path.join(__dirname, '../../data/clinic_data.json'),
     path.join(process.cwd(), 'data/clinic_data.json'),
-    path.resolve('data/clinic_data.json')
+    path.join(process.cwd(), 'server/data/clinic_data.json')
 ];
 let clinicLoaded = false;
 for (const cp of clinicPaths) {

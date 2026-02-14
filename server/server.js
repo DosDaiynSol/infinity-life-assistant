@@ -59,13 +59,9 @@ async function processBuffer() {
     responsesCount += responded;
     statsManager.trackInstagramResponse(responded);
 
+    // Track stats only — history is already saved inside handleCommentBatch()
     commentResults.forEach(r => {
       statsManager.trackInstagramComment(r.username);
-      statsManager.addInstagramHistory({
-        type: 'comment',
-        ...r,
-        timestamp: new Date().toISOString()
-      });
     });
   }
 
@@ -76,13 +72,9 @@ async function processBuffer() {
     responsesCount += responded;
     statsManager.trackInstagramResponse(responded);
 
+    // Track stats only — history is already saved inside handleDMBatch()
     dmResults.forEach(r => {
       statsManager.trackInstagramDM(r.senderId);
-      statsManager.addInstagramHistory({
-        type: 'dm',
-        ...r,
-        timestamp: new Date().toISOString()
-      });
     });
   }
 
