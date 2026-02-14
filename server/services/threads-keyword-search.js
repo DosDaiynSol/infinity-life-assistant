@@ -1,10 +1,9 @@
 /**
- * Threads Keyword Search Service v2.0
- * НОВЫЙ АЛГОРИТМ:
- * 1. Поиск по ОДНОМУ слову (остеопат, невролог, грыжа)
- * 2. Локальная фильтрация по городу (Астана - да, другие города - нет)
- * 3. Проверка на вопрос/запрос рекомендации
- * 4. LLM валидация только для прошедших фильтры
+ * Threads Keyword Search Service v3.0
+ * ДВОЙНОЙ ПОДХОД:
+ * Phase 1: Поиск "Астана" → фильтрация на релевантность услугам
+ * Phase 2: Поиск по медицинским тегам (~33/цикл) → фильтрация на "Астана"
+ * Все посты сохраняются в БД для дедупликации
  */
 
 const threadsAPI = require('./threads-api');
@@ -12,6 +11,7 @@ const threadsDB = require('./threads-database');
 const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
 
 // Load keywords with fallback
 let keywordsData;
@@ -22,10 +22,11 @@ try {
     console.log('[Threads] Keywords file not found, using defaults');
     keywordsData = {
         searchKeywords: {
-            medical: { items: ['остеопат', 'невролог', 'мануальщик'] },
+            doctors: { items: ['остеопат', 'невролог', 'мануальщик'] },
             symptoms: { items: ['грыжа', 'сколиоз', 'артроз'] },
             children: { items: ['зрр', 'аутизм'] }
         },
+        cityKeyword: 'астана',
         targetCity: 'астана',
         otherCities: ['алматы', 'москва', 'киев'],
         requirementKeywords: {
@@ -47,8 +48,9 @@ try {
     clinicData = { clinic: { name: 'INFINITY LIFE', contactPhone: '87470953952' } };
 }
 
-class ThreadsKeywordSearch {
+class ThreadsKeywordSearch extends EventEmitter {
     constructor() {
+        super();
         this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
         // Rate limits
@@ -62,18 +64,21 @@ class ThreadsKeywordSearch {
         };
 
         this.lastReplyTime = 0;
+        this.searchLog = []; // Stores the latest search log for frontend
+        this.isSearching = false;
 
         // Cache для keywords
-        this.targetCity = keywordsData.targetCity?.toLowerCase() || 'астана';
+        this.cityKeyword = keywordsData.cityKeyword || keywordsData.targetCity || 'астана';
+        this.targetCity = (keywordsData.targetCity || 'астана').toLowerCase();
         this.otherCities = (keywordsData.otherCities || []).map(c => c.toLowerCase());
         this.requirementWords = keywordsData.requirementKeywords?.items || [];
         this.healthWords = keywordsData.healthKeywords?.items || [];
     }
 
     /**
-     * Get all search keywords (single words)
+     * Get all medical search keywords (single words/phrases)
      */
-    getAllKeywords() {
+    getAllMedicalKeywords() {
         const allKeywords = [];
         const searchKeywords = keywordsData.searchKeywords || {};
 
@@ -86,13 +91,41 @@ class ThreadsKeywordSearch {
     }
 
     /**
-     * Get keywords for specific cycle (0, 1, or 2)
+     * Get medical keywords for specific cycle (0, 1, or 2)
+     * Splits ~100 keywords into 3 groups of ~33
      */
-    getKeywordsForCycle(cycleIndex) {
-        const allKeywords = this.getAllKeywords();
+    getMedicalKeywordsForCycle(cycleIndex) {
+        const allKeywords = this.getAllMedicalKeywords();
         const chunkSize = Math.ceil(allKeywords.length / this.config.cyclesPerDay);
         const start = cycleIndex * chunkSize;
         return allKeywords.slice(start, start + chunkSize);
+    }
+
+    /**
+     * Get all keywords for the keywords tab (returns structured data)
+     */
+    getKeywordsInfo() {
+        const allMedical = this.getAllMedicalKeywords();
+        const categories = {};
+        const searchKeywords = keywordsData.searchKeywords || {};
+
+        for (const [catName, category] of Object.entries(searchKeywords)) {
+            if (category && Array.isArray(category.items)) {
+                categories[catName] = {
+                    description: category.description || catName,
+                    items: category.items,
+                    count: category.items.length
+                };
+            }
+        }
+
+        return {
+            cityKeyword: this.cityKeyword,
+            totalMedicalKeywords: allMedical.length,
+            keywordsPerCycle: Math.ceil(allMedical.length / 3),
+            categories,
+            allKeywords: [this.cityKeyword, ...allMedical]
+        };
     }
 
     /**
@@ -119,15 +152,87 @@ class ThreadsKeywordSearch {
     }
 
     /**
-     * НОВЫЙ АЛГОРИТМ: Локальная фильтрация поста
-     * Шаг 1: Проверка города (Астана = хорошо, другой город = плохо)
-     * Шаг 2: Проверка что это вопрос/запрос рекомендации
-     * Шаг 3: Проверка на медицинскую тематику
+     * Emit a search log entry (for SSE streaming)
      */
-    localFilter(post) {
+    _emitLog(entry) {
+        this.searchLog.push(entry);
+        this.emit('searchLog', entry);
+    }
+
+    /**
+     * LOCAL FILTER for Phase 1 (city search "Астана"):
+     * Post found by searching "Астана" → check if related to our medical services
+     */
+    localFilterCitySearch(post) {
         const text = (post.text || '').toLowerCase();
 
         // === SPAM FILTER ===
+        if (this._isSpam(text)) {
+            return { pass: false, reason: 'Спам/другая тема' };
+        }
+
+        // Check for other city WITHOUT our city (shouldn't happen since we searched "астана" but just in case)
+        const hasOtherCity = this.otherCities.some(city => text.includes(city));
+        const hasTargetCity = text.includes(this.targetCity);
+        if (hasOtherCity && !hasTargetCity) {
+            return { pass: false, reason: 'Упомянут другой город' };
+        }
+
+        // Must be a question / seeking recommendation
+        const hasRequirement = this.requirementWords.some(word => text.includes(word)) || text.includes('?');
+        if (!hasRequirement) {
+            return { pass: false, reason: 'Не вопрос/не ищет рекомендацию' };
+        }
+
+        // Must have health/medical context
+        const hasHealthWord = this.healthWords.some(word => text.includes(word));
+        const allMedical = this.getAllMedicalKeywords();
+        const hasMedicalKeyword = allMedical.some(kw => text.includes(kw.toLowerCase()));
+
+        if (!hasHealthWord && !hasMedicalKeyword) {
+            return { pass: false, reason: 'Не медицинская тема' };
+        }
+
+        return { pass: true, phase: 'city', hasTargetCity: true };
+    }
+
+    /**
+     * LOCAL FILTER for Phase 2 (medical tag search):
+     * Post found by searching medical keyword → check if mentions "Астана"
+     */
+    localFilterMedicalSearch(post) {
+        const text = (post.text || '').toLowerCase();
+
+        // === SPAM FILTER ===
+        if (this._isSpam(text)) {
+            return { pass: false, reason: 'Спам/другая тема' };
+        }
+
+        // Must mention our city
+        const hasTargetCity = text.includes(this.targetCity);
+        if (!hasTargetCity) {
+            return { pass: false, reason: 'Нет упоминания Астаны' };
+        }
+
+        // Must NOT mention another city (without our city is already caught above)
+        const hasOtherCity = this.otherCities.some(city => text.includes(city));
+        if (hasOtherCity && !hasTargetCity) {
+            return { pass: false, reason: 'Упомянут другой город' };
+        }
+
+        // Must be a question / seeking recommendation
+        const hasRequirement = this.requirementWords.some(word => text.includes(word)) || text.includes('?');
+        if (!hasRequirement) {
+            return { pass: false, reason: 'Не вопрос/не ищет рекомендацию' };
+        }
+
+        return { pass: true, phase: 'medical', hasTargetCity: true };
+    }
+
+    /**
+     * Spam detection helper
+     */
+    _isSpam(text) {
         const spamPatterns = [
             /продаю|продам|продажа|продаётся/,
             /скидк[аи]|акция|распродажа/,
@@ -148,127 +253,251 @@ class ThreadsKeywordSearch {
             /шопинг|магазин|торгов/,
         ];
 
-        for (const pattern of spamPatterns) {
-            if (pattern.test(text)) {
-                return { pass: false, reason: `Спам/другая тема: ${pattern.source}` };
-            }
-        }
-
-        // === CITY FILTER ===
-        const hasTargetCity = text.includes(this.targetCity);
-        const hasOtherCity = this.otherCities.some(city => text.includes(city));
-
-        // Если упомянут другой город БЕЗ нашего города - отклоняем
-        if (hasOtherCity && !hasTargetCity) {
-            return { pass: false, reason: 'Упомянут другой город (не Астана)' };
-        }
-
-        // === REQUIREMENT FILTER (посоветуйте, ищу, нужен) ===
-        const hasRequirement = this.requirementWords.some(word => text.includes(word)) || text.includes('?');
-        if (!hasRequirement) {
-            return { pass: false, reason: 'Не вопрос/не ищет рекомендацию' };
-        }
-
-        // === HEALTH FILTER ===
-        const hasHealthWord = this.healthWords.some(word => text.includes(word));
-        if (!hasHealthWord) {
-            return { pass: false, reason: 'Нет медицинских ключевых слов' };
-        }
-
-        // Прошёл все фильтры - отправляем на LLM валидацию
-        return { pass: true, hasTargetCity };
+        return spamPatterns.some(pattern => pattern.test(text));
     }
 
     /**
-     * Run a search cycle
+     * Run a search cycle with dual approach
      * @param {number} cycleIndex - Cycle index (0, 1, or 2)
      */
     async runSearchCycle(cycleIndex = 0) {
-        console.log(`[Threads Search] Starting cycle ${cycleIndex + 1}/3`);
+        if (this.isSearching) {
+            console.log('[Threads Search] Already searching, skip');
+            return;
+        }
 
-        const keywords = this.getKeywordsForCycle(cycleIndex);
-        console.log(`[Threads Search] Searching ${keywords.length} keywords: ${keywords.join(', ')}`);
+        this.isSearching = true;
+        this.searchLog = []; // Reset log
+
+        console.log(`\n[Threads Search] ========== Cycle ${cycleIndex + 1}/3 START ==========`);
+
+        this._emitLog({
+            type: 'start',
+            cycle: cycleIndex + 1,
+            timestamp: new Date().toISOString(),
+            message: `🚀 Запуск цикла ${cycleIndex + 1}/3`
+        });
 
         let totalFound = 0;
-        let totalPassed = 0;
+        let totalPassedFilter = 0;
+        let totalNewSaved = 0;
+        let totalDuplicate = 0;
+        let apiRequests = 0;
 
-        for (const keyword of keywords) {
-            try {
-                // Search posts by SINGLE keyword
-                const posts = await threadsAPI.keywordSearch(keyword, {
-                    search_type: 'RECENT',
-                    since: threadsAPI.get24HoursAgo(),
-                    limit: 50
-                });
+        try {
+            // ====== PHASE 1: Search "Астана" ======
+            this._emitLog({
+                type: 'phase',
+                phase: 1,
+                message: `📍 Фаза 1: Поиск "${this.cityKeyword}" → фильтр на медицинские услуги`
+            });
 
-                console.log(`[Threads Search] "${keyword}": found ${posts.length} raw posts`);
-                totalFound += posts.length;
+            const cityResult = await this._searchKeyword(this.cityKeyword, 'city');
+            totalFound += cityResult.found;
+            totalPassedFilter += cityResult.passed;
+            totalNewSaved += cityResult.newSaved;
+            totalDuplicate += cityResult.duplicate;
+            apiRequests++;
 
-                // LOCAL FILTER each post
-                let passedCount = 0;
-                for (const post of posts) {
-                    const filter = this.localFilter(post);
-                    if (filter.pass) {
-                        // Save only posts that passed local filter
-                        const isNew = await threadsDB.saveNewPosts([post], keyword);
-                        if (isNew > 0) {
-                            passedCount++;
-                            console.log(`[Threads Search] ✓ Passed: @${post.username} - "${post.text?.substring(0, 50)}..."`);
-                        }
-                    }
+            this._emitLog({
+                type: 'keyword_result',
+                keyword: this.cityKeyword,
+                phase: 'city',
+                found: cityResult.found,
+                passed: cityResult.passed,
+                newSaved: cityResult.newSaved,
+                duplicate: cityResult.duplicate,
+                message: `🔍 "${this.cityKeyword}": найдено ${cityResult.found}, после фильтра ${cityResult.passed}, новых ${cityResult.newSaved}, дубли ${cityResult.duplicate}`
+            });
+
+            // Delay
+            await threadsAPI.sleep(this.config.delayBetweenRequests);
+
+            // ====== PHASE 2: Search medical keywords (33 per cycle) ======
+            const medicalKeywords = this.getMedicalKeywordsForCycle(cycleIndex);
+
+            this._emitLog({
+                type: 'phase',
+                phase: 2,
+                message: `🏥 Фаза 2: Поиск ${medicalKeywords.length} медицинских тегов → фильтр на "Астана"`
+            });
+
+            for (let i = 0; i < medicalKeywords.length; i++) {
+                const keyword = medicalKeywords[i];
+                try {
+                    const result = await this._searchKeyword(keyword, 'medical');
+                    totalFound += result.found;
+                    totalPassedFilter += result.passed;
+                    totalNewSaved += result.newSaved;
+                    totalDuplicate += result.duplicate;
+                    apiRequests++;
+
+                    this._emitLog({
+                        type: 'keyword_result',
+                        keyword,
+                        phase: 'medical',
+                        found: result.found,
+                        passed: result.passed,
+                        newSaved: result.newSaved,
+                        duplicate: result.duplicate,
+                        progress: `${i + 1}/${medicalKeywords.length}`,
+                        message: `🔍 "${keyword}" [${i + 1}/${medicalKeywords.length}]: найдено ${result.found}, после фильтра ${result.passed}, новых ${result.newSaved}`
+                    });
+
+                    // Delay between requests
+                    await threadsAPI.sleep(this.config.delayBetweenRequests);
+                } catch (error) {
+                    console.error(`[Threads Search] Error for "${keyword}":`, error.message);
+                    this._emitLog({
+                        type: 'error',
+                        keyword,
+                        message: `❌ Ошибка "${keyword}": ${error.message}`
+                    });
                 }
+            }
 
-                totalPassed += passedCount;
+            // ====== LLM Validation ======
+            this._emitLog({
+                type: 'phase',
+                phase: 3,
+                message: `🤖 Фаза 3: LLM валидация + автоответы`
+            });
 
-                // Log API request
-                await threadsDB.logApiRequest(keyword, posts.length, passedCount);
+            const validationResult = await this.processNewPosts();
 
-                // Delay between requests
-                await threadsAPI.sleep(this.config.delayBetweenRequests);
-            } catch (error) {
-                console.error(`[Threads Search] Error for "${keyword}":`, error.message);
+            // ====== Summary ======
+            const summary = {
+                type: 'summary',
+                cycle: cycleIndex + 1,
+                apiRequests,
+                totalFound,
+                passedLocalFilter: totalPassedFilter,
+                newSaved: totalNewSaved,
+                duplicates: totalDuplicate,
+                llmValidated: validationResult.validated,
+                llmRejected: validationResult.rejected,
+                replied: validationResult.replied,
+                timestamp: new Date().toISOString(),
+                message: `📊 Итого: ${apiRequests} API запросов, ${totalFound} найдено, ${totalPassedFilter} после фильтра, ${totalNewSaved} новых, ${validationResult.validated} валидных, ${validationResult.replied} ответов`
+            };
+
+            this._emitLog(summary);
+
+            console.log(`[Threads Search] ========== Cycle ${cycleIndex + 1}/3 DONE ==========`);
+            console.log(`[Threads Search] ${summary.message}\n`);
+
+            // Log total API requests
+            await threadsDB.logApiRequest(`cycle_${cycleIndex + 1}`, totalFound, totalNewSaved);
+
+        } catch (error) {
+            console.error('[Threads Search] Cycle error:', error.message);
+            this._emitLog({
+                type: 'error',
+                message: `❌ Критическая ошибка цикла: ${error.message}`
+            });
+        } finally {
+            this.isSearching = false;
+            this._emitLog({ type: 'end', message: '✅ Цикл завершён' });
+        }
+    }
+
+    /**
+     * Search a single keyword and apply the appropriate filter
+     * @param {string} keyword - Keyword to search
+     * @param {string} phase - 'city' or 'medical'
+     * @returns {Object} - { found, passed, newSaved, duplicate }
+     */
+    async _searchKeyword(keyword, phase) {
+        const posts = await threadsAPI.keywordSearch(keyword, {
+            search_type: 'RECENT',
+            since: threadsAPI.get24HoursAgo(),
+            limit: 50
+        });
+
+        let found = posts.length;
+        let passed = 0;
+        let newSaved = 0;
+        let duplicate = 0;
+
+        for (const post of posts) {
+            // Apply the appropriate filter based on phase
+            const filter = phase === 'city'
+                ? this.localFilterCitySearch(post)
+                : this.localFilterMedicalSearch(post);
+
+            if (filter.pass) {
+                passed++;
+
+                // Save to DB (dedup by post_id)
+                const savedCount = await threadsDB.saveNewPosts([post], keyword);
+                if (savedCount > 0) {
+                    newSaved++;
+                    console.log(`[Threads Search] ✓ NEW: @${post.username} via "${keyword}" — "${post.text?.substring(0, 60)}..."`);
+                } else {
+                    duplicate++;
+                }
             }
         }
 
-        console.log(`[Threads Search] Cycle summary: ${totalFound} raw → ${totalPassed} passed filter`);
-
-        // Process new posts with LLM validation
-        await this.processNewPosts();
-
-        console.log(`[Threads Search] Cycle ${cycleIndex + 1} completed`);
+        return { found, passed, newSaved, duplicate };
     }
 
     /**
      * Process all new posts - LLM validate and reply
+     * @returns {Object} - { validated, rejected, replied }
      */
     async processNewPosts() {
+        const result = { validated: 0, rejected: 0, replied: 0 };
+
         if (!this.isWorkingHours()) {
             console.log('[Threads Search] Outside working hours, skipping replies');
-            return;
+            this._emitLog({
+                type: 'info',
+                message: '⏰ Вне рабочего времени — автоответы отключены'
+            });
+            return result;
         }
 
         const newPosts = await threadsDB.getPostsByStatus('new', 20);
         console.log(`[Threads Search] LLM validating ${newPosts.length} posts`);
 
+        this._emitLog({
+            type: 'info',
+            message: `🤖 LLM валидация: ${newPosts.length} постов`
+        });
+
         for (const post of newPosts) {
-            // LLM validation (only for posts that passed local filter)
+            // LLM validation
             const validation = await this.validatePost(post);
 
             if (!validation.valid) {
                 await threadsDB.updatePostStatus(post.id, 'skipped', {
                     validation_result: validation
                 });
+                result.rejected++;
                 console.log(`[Threads Search] LLM rejected: ${validation.reason}`);
                 continue;
             }
 
+            result.validated++;
             console.log(`[Threads Search] ✓ LLM validated: ${validation.matchedService}`);
+
+            this._emitLog({
+                type: 'validated',
+                username: post.username,
+                service: validation.matchedService,
+                message: `✅ Валидный: @${post.username} → ${validation.matchedService}`
+            });
 
             // Check if we can reply
             if (!await this.canReplyToday()) {
                 console.log('[Threads Search] Daily reply limit reached');
                 await threadsDB.updatePostStatus(post.id, 'validated', {
                     validation_result: validation
+                });
+                this._emitLog({
+                    type: 'info',
+                    message: `⚠️ Лимит ответов на день достигнут`
                 });
                 continue;
             }
@@ -293,7 +522,14 @@ class ThreadsKeywordSearch {
                         reply_text: replyText,
                         reply_id: replyId
                     });
+                    result.replied++;
                     console.log(`[Threads Search] Replied to @${post.username}: ${replyText.substring(0, 50)}...`);
+
+                    this._emitLog({
+                        type: 'replied',
+                        username: post.username,
+                        message: `💬 Ответ отправлен: @${post.username}`
+                    });
                 } else {
                     await threadsDB.updatePostStatus(post.id, 'validated', {
                         validation_result: validation
@@ -306,6 +542,8 @@ class ThreadsKeywordSearch {
                 });
             }
         }
+
+        return result;
     }
 
     /**
@@ -402,6 +640,13 @@ class ThreadsKeywordSearch {
      */
     async getStats() {
         return await threadsDB.getDailyStats();
+    }
+
+    /**
+     * Get latest search log
+     */
+    getSearchLog() {
+        return this.searchLog;
     }
 
     /**

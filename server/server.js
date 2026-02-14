@@ -674,13 +674,27 @@ app.get('/api/threads/status', async (req, res) => {
     const threadsDB = require('./services/threads-database');
     const stats = await threadsDB.getStats();
     const chartData = await threadsDB.getChartData();
+    const keywordsInfo = threadsKeywordSearch.getKeywordsInfo();
     res.json({
       enabled: true,
       schedule: ['08:00', '14:00', '20:00'],
       maxRepliesPerDay: 10,
+      isSearching: threadsKeywordSearch.isSearching,
       stats,
-      chartData
+      chartData,
+      totalKeywords: keywordsInfo.totalMedicalKeywords + 1, // +1 for city
+      keywordsPerCycle: keywordsInfo.keywordsPerCycle
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get keywords info
+app.get('/api/threads/keywords', (req, res) => {
+  try {
+    const info = threadsKeywordSearch.getKeywordsInfo();
+    res.json(info);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -706,12 +720,58 @@ app.get('/api/threads/posts', async (req, res) => {
   }
 });
 
-// Manual trigger - run search cycle
+// SSE endpoint - real-time search log stream
+app.get('/api/threads/search/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+
+  // Send existing log entries if search is already in progress
+  const existingLog = threadsKeywordSearch.getSearchLog();
+  for (const entry of existingLog) {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+
+  // Listen for new log entries
+  const onLog = (entry) => {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  };
+
+  threadsKeywordSearch.on('searchLog', onLog);
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    threadsKeywordSearch.off('searchLog', onLog);
+  });
+});
+
+// Get latest search log (for non-SSE clients)
+app.get('/api/threads/search/log', (req, res) => {
+  res.json({
+    isSearching: threadsKeywordSearch.isSearching,
+    log: threadsKeywordSearch.getSearchLog()
+  });
+});
+
+// Manual trigger - run search cycle (non-blocking, returns immediately)
 app.post('/api/threads/search', async (req, res) => {
   try {
+    if (threadsKeywordSearch.isSearching) {
+      return res.json({ status: 'already_searching', message: 'Поиск уже запущен' });
+    }
+
     console.log('[Threads] Manual search triggered');
-    const stats = await threadsKeywordSearch.runManualCycle();
-    res.json({ status: 'ok', stats });
+    res.json({ status: 'started', message: 'Поиск запущен. Следите за логом.' });
+
+    // Run search asynchronously
+    threadsKeywordSearch.runSearchCycle(0).then(async () => {
+      console.log('[Threads] Manual search completed');
+    }).catch(err => {
+      console.error('[Threads] Manual search error:', err.message);
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

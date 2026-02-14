@@ -544,6 +544,7 @@ setInterval(() => {
 // ==========================================
 let threadsCachedPosts = { new: [], validated: [], replied: [] };
 let threadsActiveTab = 'new';
+let threadsSSE = null; // SSE connection for search log
 
 // Load Threads data when switching to tab
 function loadThreadsData() {
@@ -574,6 +575,11 @@ async function loadThreadsStatus() {
     // Update chart if data available
     if (data.chartData) {
       updateThreadsChart(data.chartData);
+    }
+
+    // If search is running, show the log panel
+    if (data.isSearching) {
+      threadsConnectSSE();
     }
   } catch (error) {
     console.error('Threads status error:', error);
@@ -642,27 +648,45 @@ function renderThreadsPosts(status) {
   }).join('');
 }
 
-// Keywords
+// Keywords - loaded from API
 async function loadThreadsKeywords() {
   try {
-    // Load from static file or use predefined list
-    const keywords = [
-      'остеопат астана', 'ищу остеопата', 'посоветуйте остеопата',
-      'невролог астана', 'невропатолог астана', 'детский невролог астана',
-      'мануальный терапевт астана', 'мануальная терапия астана',
-      'боль в спине астана', 'болит спина', 'болит поясница',
-      'грыжа позвоночника', 'межпозвоночная грыжа', 'лечение грыжи',
-      'сколиоз астана', 'сколиоз лечение', 'искривление позвоночника',
-      'артроз астана', 'боль в суставах', 'артрит лечение',
-      'зрр астана', 'зпр астана', 'задержка речи', 'аутизм астана',
-      'мрт астана', 'узи астана', 'кт астана',
-      'посоветуйте врача астана', 'посоветуйте клинику астана'
-    ];
+    const response = await fetch(`${API_BASE}/api/threads/keywords`);
+    const data = await response.json();
 
     const container = document.getElementById('threadsKeywordsList');
-    container.innerHTML = keywords.map(kw =>
-      `<span class="threads-keyword-tag">${escapeHtml(kw)}</span>`
-    ).join('');
+
+    // Build HTML with categories
+    let html = '';
+
+    // City keyword first
+    html += `<div class="threads-keyword-category">
+      <div class="threads-keyword-category-title">📍 Город (каждый цикл)</div>
+      <div class="threads-keyword-tags">
+        <span class="threads-keyword-tag city-tag">${escapeHtml(data.cityKeyword)}</span>
+      </div>
+    </div>`;
+
+    // Medical categories
+    for (const [catKey, cat] of Object.entries(data.categories || {})) {
+      html += `<div class="threads-keyword-category">
+        <div class="threads-keyword-category-title">${escapeHtml(cat.description)} (${cat.count})</div>
+        <div class="threads-keyword-tags">
+          ${cat.items.map(kw => `<span class="threads-keyword-tag">${escapeHtml(kw)}</span>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    // Total
+    html += `<div class="threads-keyword-total">Всего: ${data.totalMedicalKeywords} тегов · ~${data.keywordsPerCycle} на цикл</div>`;
+
+    container.innerHTML = html;
+
+    // Update keywords count in tab header
+    const keywordsHeader = document.querySelector('#threads-tab-keywords .section-title');
+    if (keywordsHeader) {
+      keywordsHeader.textContent = `🔑 Ключевые слова (${data.totalMedicalKeywords + 1})`;
+    }
   } catch (error) {
     console.error('Threads keywords error:', error);
   }
@@ -687,27 +711,211 @@ function switchThreadsTab(tab) {
   }
 }
 
-// Run search
+// Show metric detail on tile click
+function showThreadsMetric(metric) {
+  if (metric === 'found') {
+    // Show the latest search log
+    const logPanel = document.getElementById('threadsSearchLog');
+    if (logPanel.style.display === 'none') {
+      // Try to load the log
+      threadsLoadLog();
+    }
+    logPanel.style.display = 'block';
+    logPanel.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+// Run search with SSE log streaming
 async function threadsRunSearch() {
   const btn = document.getElementById('btnThreadsSearch');
-  btn.textContent = '⏳ Ищу...';
+  btn.textContent = '⏳ Запуск...';
   btn.classList.add('loading');
 
   try {
-    await fetch(`${API_BASE}/api/threads/search`, { method: 'POST' });
-    btn.textContent = '✅ Готово!';
-    await loadThreadsData();
+    const response = await fetch(`${API_BASE}/api/threads/search`, { method: 'POST' });
+    const data = await response.json();
 
-    setTimeout(() => {
-      btn.textContent = '🔍 Запустить поиск';
-      btn.classList.remove('loading');
-    }, 2000);
+    if (data.status === 'already_searching') {
+      btn.textContent = '⏳ Уже ищет...';
+    } else {
+      btn.textContent = '⏳ Поиск идёт...';
+    }
+
+    // Connect to SSE for real-time log
+    threadsConnectSSE();
+
   } catch (error) {
     btn.textContent = '❌ Ошибка';
     setTimeout(() => {
       btn.textContent = '🔍 Запустить поиск';
       btn.classList.remove('loading');
     }, 2000);
+  }
+}
+
+// Connect to SSE stream for real-time search log
+function threadsConnectSSE() {
+  // Close existing connection
+  if (threadsSSE) {
+    threadsSSE.close();
+  }
+
+  // Show log panel
+  const logPanel = document.getElementById('threadsSearchLog');
+  const logBody = document.getElementById('threadsLogBody');
+  const logSummary = document.getElementById('threadsLogSummary');
+  const logStatus = document.getElementById('threadsLogStatus');
+
+  logPanel.style.display = 'block';
+  logStatus.textContent = '⏳ Выполняется...';
+  logSummary.style.display = 'none';
+
+  // Don't clear — SSE will replay existing entries
+  logBody.innerHTML = '';
+
+  threadsSSE = new EventSource(`${API_BASE}/api/threads/search/stream`);
+
+  threadsSSE.onmessage = (event) => {
+    const entry = JSON.parse(event.data);
+    threadsRenderLogEntry(entry);
+  };
+
+  threadsSSE.onerror = () => {
+    threadsSSE.close();
+    threadsSSE = null;
+    logStatus.textContent = '✅ Завершено';
+
+    // Reset button
+    const btn = document.getElementById('btnThreadsSearch');
+    btn.textContent = '🔍 Запустить поиск';
+    btn.classList.remove('loading');
+
+    // Refresh data
+    loadThreadsStatus();
+    loadThreadsPosts();
+  };
+}
+
+// Load existing search log (non-SSE)
+async function threadsLoadLog() {
+  try {
+    const response = await fetch(`${API_BASE}/api/threads/search/log`);
+    const data = await response.json();
+
+    const logBody = document.getElementById('threadsLogBody');
+    const logStatus = document.getElementById('threadsLogStatus');
+    const logSummary = document.getElementById('threadsLogSummary');
+
+    logBody.innerHTML = '';
+    logSummary.style.display = 'none';
+
+    if (data.log.length === 0) {
+      logBody.innerHTML = '<div class="threads-log-empty">Нет данных. Запустите поиск.</div>';
+      logStatus.textContent = 'Нет данных';
+      return;
+    }
+
+    for (const entry of data.log) {
+      threadsRenderLogEntry(entry);
+    }
+
+    logStatus.textContent = data.isSearching ? '⏳ Выполняется...' : '✅ Завершено';
+  } catch (error) {
+    console.error('Load log error:', error);
+  }
+}
+
+// Render a single log entry
+function threadsRenderLogEntry(entry) {
+  const logBody = document.getElementById('threadsLogBody');
+  const logSummary = document.getElementById('threadsLogSummary');
+  const logStatus = document.getElementById('threadsLogStatus');
+
+  if (entry.type === 'summary') {
+    // Show summary in dedicated area
+    logSummary.style.display = 'block';
+    logSummary.innerHTML = `
+      <div class="threads-summary-grid">
+        <div class="threads-summary-item">
+          <span class="threads-summary-value">${entry.apiRequests}</span>
+          <span class="threads-summary-label">API запросов</span>
+        </div>
+        <div class="threads-summary-item">
+          <span class="threads-summary-value">${entry.totalFound}</span>
+          <span class="threads-summary-label">Найдено</span>
+        </div>
+        <div class="threads-summary-item">
+          <span class="threads-summary-value">${entry.passedLocalFilter}</span>
+          <span class="threads-summary-label">Прошли фильтр</span>
+        </div>
+        <div class="threads-summary-item">
+          <span class="threads-summary-value">${entry.newSaved}</span>
+          <span class="threads-summary-label">Новых</span>
+        </div>
+        <div class="threads-summary-item highlight">
+          <span class="threads-summary-value">${entry.llmValidated}</span>
+          <span class="threads-summary-label">LLM валидных</span>
+        </div>
+        <div class="threads-summary-item success">
+          <span class="threads-summary-value">${entry.replied}</span>
+          <span class="threads-summary-label">Ответов</span>
+        </div>
+      </div>
+    `;
+    logStatus.textContent = '✅ Завершено';
+    return;
+  }
+
+  if (entry.type === 'end') {
+    logStatus.textContent = '✅ Завершено';
+
+    // Reset button
+    const btn = document.getElementById('btnThreadsSearch');
+    btn.textContent = '🔍 Запустить поиск';
+    btn.classList.remove('loading');
+
+    // Disconnect SSE
+    if (threadsSSE) {
+      threadsSSE.close();
+      threadsSSE = null;
+    }
+
+    // Refresh data
+    setTimeout(() => {
+      loadThreadsStatus();
+      loadThreadsPosts();
+    }, 1000);
+    return;
+  }
+
+  // Build CSS class based on entry type
+  let cssClass = 'threads-log-entry';
+  if (entry.type === 'start') cssClass += ' log-start';
+  else if (entry.type === 'phase') cssClass += ' log-phase';
+  else if (entry.type === 'keyword_result') {
+    cssClass += ' log-keyword';
+    if (entry.newSaved > 0) cssClass += ' has-new';
+  }
+  else if (entry.type === 'validated') cssClass += ' log-validated';
+  else if (entry.type === 'replied') cssClass += ' log-replied';
+  else if (entry.type === 'error') cssClass += ' log-error';
+  else if (entry.type === 'info') cssClass += ' log-info';
+
+  const el = document.createElement('div');
+  el.className = cssClass;
+  el.textContent = entry.message;
+  logBody.appendChild(el);
+
+  // Auto-scroll to bottom
+  logBody.scrollTop = logBody.scrollHeight;
+}
+
+// Close log panel
+function threadsCloseLog() {
+  document.getElementById('threadsSearchLog').style.display = 'none';
+  if (threadsSSE) {
+    threadsSSE.close();
+    threadsSSE = null;
   }
 }
 

@@ -242,6 +242,17 @@
         </button>
       </div>
 
+      <!-- Threads Search Log (real-time) -->
+      <div class="threads-search-log" id="threadsSearchLog" style="display: none;">
+        <div class="threads-log-header">
+          <span class="threads-log-title">📋 Лог поиска</span>
+          <span class="threads-log-status" id="threadsLogStatus">⏳ Выполняется...</span>
+          <button class="threads-log-close" onclick="threadsCloseLog()">✕</button>
+        </div>
+        <div class="threads-log-body" id="threadsLogBody"></div>
+        <div class="threads-log-summary" id="threadsLogSummary" style="display: none;"></div>
+      </div>
+
       <!-- Threads Stats Grid -->
       <div class="stats-grid">
         <div class="stat-card threads-card clickable" onclick="switchThreadsTab('new')">
@@ -249,7 +260,7 @@
           <div class="stat-value" id="threadsApiRequests">0</div>
           <div class="stat-label">API запросов</div>
         </div>
-        <div class="stat-card threads-card clickable" onclick="switchThreadsTab('new')">
+        <div class="stat-card threads-card clickable" onclick="showThreadsMetric('found')">
           <div class="stat-icon">📝</div>
           <div class="stat-value" id="threadsPostsFound">0</div>
           <div class="stat-label">Постов найдено</div>
