@@ -699,10 +699,16 @@ app.get('/api/threads/posts', async (req, res) => {
     const threadsDB = require('./services/threads-database');
     let posts;
     if (status === 'all') {
-      posts = await threadsDB.getPostsByStatus('new', 100);
+      const newPosts = await threadsDB.getPostsByStatus('new', 100);
+      const skipped = await threadsDB.getPostsByStatus('skipped', 100);
       const validated = await threadsDB.getPostsByStatus('validated', 100);
       const replied = await threadsDB.getPostsByStatus('replied', 100);
-      posts = [...posts, ...validated, ...replied];
+      posts = [...newPosts, ...skipped, ...validated, ...replied];
+    } else if (status === 'new') {
+      // Show both new and skipped (LLM rejected) posts
+      const newPosts = await threadsDB.getPostsByStatus('new', 100);
+      const skipped = await threadsDB.getPostsByStatus('skipped', 100);
+      posts = [...newPosts, ...skipped];
     } else {
       posts = await threadsDB.getPostsByStatus(status, 100);
     }

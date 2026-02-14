@@ -978,6 +978,22 @@ body {
   border-left: 3px solid var(--success);
 }
 
+.threads-post-item.skipped {
+  border-left: 3px solid var(--text-muted);
+  opacity: 0.7;
+}
+
+.threads-post-skipped {
+  display: inline-block;
+  background: #fee2e2;
+  color: var(--error);
+  padding: 0.15rem 0.4rem;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+}
+
 .threads-post-header {
   display: flex;
   justify-content: space-between;

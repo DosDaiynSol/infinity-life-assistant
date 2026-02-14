@@ -595,7 +595,7 @@ async function loadThreadsPosts() {
     // Categorize posts
     threadsCachedPosts = { new: [], validated: [], replied: [] };
     (data.posts || []).forEach(post => {
-      if (post.status === 'new') threadsCachedPosts.new.push(post);
+      if (post.status === 'new' || post.status === 'skipped') threadsCachedPosts.new.push(post);
       else if (post.status === 'validated') threadsCachedPosts.validated.push(post);
       else if (post.status === 'replied') threadsCachedPosts.replied.push(post);
     });
@@ -630,12 +630,14 @@ function renderThreadsPosts(status) {
         <div class="threads-reply-text">${escapeHtml(post.reply_text)}</div>
       </div>
     ` : '';
+    const skippedBadge = post.status === 'skipped' ? `<span class="threads-post-skipped">❌ LLM отклонён</span>` : '';
+    const statusClass = post.status === 'skipped' ? 'skipped' : post.status;
 
     return `
-      <div class="threads-post-item ${post.status}">
+      <div class="threads-post-item ${statusClass}">
         <div class="threads-post-header">
           <span class="threads-post-user">@${escapeHtml(post.username || 'unknown')}</span>
-          <span class="threads-post-keyword">${escapeHtml(post.keyword_matched || '')}</span>
+          <span>${skippedBadge}<span class="threads-post-keyword">${escapeHtml(post.keyword_matched || '')}</span></span>
         </div>
         <div class="threads-post-text">${escapeHtml(post.text || '')}</div>
         <div class="threads-post-footer">
