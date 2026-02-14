@@ -186,8 +186,8 @@ function renderHistoryItem(item) {
     rejectionInfo = `<div class="rejection-badge">${item.rejection.icon} ${item.rejection.label}</div>`;
   }
 
-  const messageText = isComment ? item.text : (item.messages || []).join(' | ');
-  const username = item.username || item.senderId?.substring(0, 10) || 'Unknown';
+  const messageText = item.text || (item.messages || []).join(' | ');
+  const username = item.username || item.senderId?.substring(0, 10) || item.userId?.substring(0, 10) || 'Unknown';
 
   return `<div class="history-item ${statusClass}">
     <div class="history-header">
