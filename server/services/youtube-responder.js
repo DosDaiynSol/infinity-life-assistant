@@ -107,7 +107,7 @@ ${treatments.join(', ')}
         // Skip spam-like comments
         const spamPatterns = [
             'подписка', 'subscribe', 'check my channel', 'посмотри мой канал',
-            'http://', 'https://', '.com', '.ru', '.kz'
+            'http://', 'https://', 'www.', 'подпишись', 'лайк на лайк'
         ];
         if (spamPatterns.some(pattern => text.includes(pattern))) return false;
 

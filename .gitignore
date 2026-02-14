@@ -1,7 +1,13 @@
 node_modules/
 .env
+backend/.env
 *.log
 .DS_Store
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/migrations/__pycache__/
+backend/media/
 data/youtube_tokens.json
 data/*_stats.json
 data/google_business_tokens.json

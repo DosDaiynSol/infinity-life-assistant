@@ -27,7 +27,10 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
+// Allow text/plain payloads (e.g., n8n forwards) to be parsed manually
+app.use(express.text({ type: 'text/*' }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../dashboard')));
 
 // Initialize message buffer
@@ -144,16 +147,76 @@ setInterval(processYouTubeComments, YOUTUBE_POLL_INTERVAL);
 // Also run once after 30 seconds of server start
 setTimeout(processYouTubeComments, 30000);
 
+function tryParseJson(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return value;
+  }
+}
+
+function unwrapPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const candidates = ['body', 'data', 'payload'];
+  for (const key of candidates) {
+    if (payload[key]) {
+      const parsed = tryParseJson(payload[key]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  }
+
+  return payload;
+}
+
+function toArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+// Webhook verification (Meta/Instagram)
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const verifyToken = process.env.INSTAGRAM_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN;
+
+  if (!verifyToken) {
+    console.warn('[Webhook verify] Missing INSTAGRAM_VERIFY_TOKEN/WEBHOOK_VERIFY_TOKEN');
+    return res.sendStatus(403);
+  }
+
+  if (mode === 'subscribe' && token === verifyToken) {
+    console.log('[Webhook verify] Success');
+    return res.status(200).send(challenge);
+  }
+
+  console.warn('[Webhook verify] Failed');
+  return res.sendStatus(403);
+});
+
 // Webhook endpoint
 app.post('/webhook', (req, res) => {
-  const body = req.body;
-  console.log('[Webhook received]', JSON.stringify(body, null, 2));
+  let payload = tryParseJson(req.body);
+  payload = unwrapPayload(payload);
 
-  if (body.object === 'instagram') {
-    for (const entry of body.entry || []) {
+  if (!payload || typeof payload !== 'object') {
+    console.warn('[Webhook] Invalid payload type');
+    return res.status(400).json({ status: 'error', message: 'Invalid payload' });
+  }
+
+  console.log('[Webhook received]', JSON.stringify(payload, null, 2));
+
+  if (payload.object === 'instagram') {
+    const entries = toArray(payload.entry);
+    for (const entry of entries) {
       // Handle Direct Messages
-      if (entry.messaging) {
-        for (const msg of entry.messaging) {
+      const messaging = toArray(entry.messaging);
+      if (messaging.length > 0) {
+        for (const msg of messaging) {
           if (msg.message && !msg.message.is_deleted && msg.message.text) {
             buffer.addDM({
               senderId: msg.sender.id,
@@ -167,8 +230,9 @@ app.post('/webhook', (req, res) => {
       }
 
       // Handle Comments
-      if (entry.changes) {
-        for (const change of entry.changes) {
+      const changes = toArray(entry.changes);
+      if (changes.length > 0) {
+        for (const change of changes) {
           if (change.field === 'comments' && change.value) {
             const val = change.value;
             buffer.addComment({

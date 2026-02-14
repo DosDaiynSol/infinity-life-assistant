@@ -167,10 +167,16 @@ class YouTubeAPI {
                 text: response.data.snippet.textDisplay
             };
         } catch (error) {
-            console.error('[YouTube API] Error replying to comment:', error.response?.data || error.message);
+            const errData = error.response?.data;
+            const status = error.response?.status;
+            console.error(`[YouTube API] ❌ Error replying to comment ${parentId}:`);
+            console.error(`  HTTP Status: ${status}`);
+            console.error(`  Error Code: ${errData?.error?.code || 'unknown'}`);
+            console.error(`  Error Message: ${errData?.error?.message || error.message}`);
+            console.error(`  Full Error:`, JSON.stringify(errData || error.message));
             return {
                 success: false,
-                error: error.response?.data?.error?.message || error.message
+                error: errData?.error?.message || error.message
             };
         }
     }

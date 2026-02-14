@@ -1,10 +1,60 @@
 const youtubeAPI = require('../services/youtube-api');
 const youtubeResponder = require('../services/youtube-responder');
+const { createClient } = require('@supabase/supabase-js');
 
 class YouTubeHandler {
     constructor() {
         this.channelId = process.env.YOUTUBE_CHANNEL_ID;
-        this.processedComments = new Set(); // Track processed comments in memory
+        this.supabase = null;
+
+        // Initialize Supabase for persistent comment tracking
+        if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+            this.supabase = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_KEY,
+                { auth: { persistSession: false } }
+            );
+            console.log('[YouTube Handler] Connected to Supabase for comment tracking');
+        }
+    }
+
+    /**
+     * Check if comment was already processed (in Supabase)
+     */
+    async isCommentProcessed(commentId) {
+        if (!this.supabase) return false;
+
+        const { data } = await this.supabase
+            .from('youtube_processed_comments')
+            .select('id')
+            .eq('comment_id', commentId)
+            .single();
+
+        return !!data;
+    }
+
+    /**
+     * Save processed comment to Supabase
+     */
+    async saveProcessedComment(commentData) {
+        if (!this.supabase) return;
+
+        try {
+            await this.supabase
+                .from('youtube_processed_comments')
+                .upsert({
+                    comment_id: commentData.commentId,
+                    video_id: commentData.videoId,
+                    author: commentData.author,
+                    comment_text: commentData.text,
+                    response_text: commentData.response || null,
+                    responded: commentData.responded || false,
+                    error: commentData.error || null,
+                    processed_at: new Date().toISOString()
+                }, { onConflict: 'comment_id' });
+        } catch (error) {
+            console.error('[YouTube Handler] Error saving processed comment:', error.message);
+        }
     }
 
     // Process comments for a specific video
@@ -21,19 +71,30 @@ class YouTubeHandler {
             console.log(`[YouTube Handler] Found ${comments.length} comments potentially needing reply`);
 
             for (const comment of comments) {
-                // Skip if already processed this session
-                if (this.processedComments.has(comment.commentId)) {
+                // Skip if already processed (persistent check via Supabase)
+                const alreadyProcessed = await this.isCommentProcessed(comment.commentId);
+                if (alreadyProcessed) {
                     continue;
                 }
 
                 // Check if should respond
                 if (!youtubeResponder.shouldRespond(comment)) {
-                    results.push({
+                    const result = {
                         commentId: comment.commentId,
                         author: comment.authorDisplayName,
                         text: comment.textOriginal,
                         responded: false,
                         reason: 'filtered'
+                    };
+                    results.push(result);
+                    // Save even filtered comments so we don't reprocess
+                    await this.saveProcessedComment({
+                        commentId: comment.commentId,
+                        videoId,
+                        author: comment.authorDisplayName,
+                        text: comment.textOriginal,
+                        responded: false,
+                        error: 'filtered'
                     });
                     continue;
                 }
@@ -46,11 +107,10 @@ class YouTubeHandler {
                     );
 
                     // Post reply
+                    console.log(`[YouTube Handler] Attempting to reply to @${comment.authorDisplayName}...`);
                     const replyResult = await youtubeAPI.replyToComment(comment.commentId, responseText);
 
-                    this.processedComments.add(comment.commentId);
-
-                    results.push({
+                    const result = {
                         commentId: comment.commentId,
                         author: comment.authorDisplayName,
                         text: comment.textOriginal || comment.text,
@@ -58,17 +118,43 @@ class YouTubeHandler {
                         responded: replyResult.success,
                         replyId: replyResult.commentId,
                         error: replyResult.error
+                    };
+                    results.push(result);
+
+                    // Save to Supabase
+                    await this.saveProcessedComment({
+                        commentId: comment.commentId,
+                        videoId,
+                        author: comment.authorDisplayName,
+                        text: comment.textOriginal || comment.text,
+                        response: replyResult.success ? responseText : null,
+                        responded: replyResult.success,
+                        error: replyResult.error || null
                     });
 
-                    console.log(`[YouTube Handler] Replied to @${comment.authorDisplayName}: "${responseText.substring(0, 50)}..."`);
+                    if (replyResult.success) {
+                        console.log(`[YouTube Handler] ✅ Replied to @${comment.authorDisplayName}: "${responseText.substring(0, 50)}..."`);
+                    } else {
+                        console.error(`[YouTube Handler] ❌ Failed to reply to @${comment.authorDisplayName}: ${replyResult.error}`);
+                    }
 
                     // Small delay between replies to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));
 
                 } catch (error) {
                     console.error(`[YouTube Handler] Error processing comment ${comment.commentId}:`, error.message);
-                    results.push({
+                    const result = {
                         commentId: comment.commentId,
+                        author: comment.authorDisplayName,
+                        text: comment.textOriginal,
+                        responded: false,
+                        error: error.message
+                    };
+                    results.push(result);
+
+                    await this.saveProcessedComment({
+                        commentId: comment.commentId,
+                        videoId,
                         author: comment.authorDisplayName,
                         text: comment.textOriginal,
                         responded: false,
@@ -129,14 +215,9 @@ class YouTubeHandler {
     // Get stats
     getStats() {
         return {
-            processedCommentsCount: this.processedComments.size,
-            channelId: this.channelId
+            channelId: this.channelId,
+            supabaseConnected: !!this.supabase
         };
-    }
-
-    // Clear processed cache (for testing)
-    clearCache() {
-        this.processedComments.clear();
     }
 }
 

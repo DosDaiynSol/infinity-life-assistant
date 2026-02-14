@@ -1,6 +1,10 @@
 /**
- * Threads Keyword Search Service
- * Main orchestration for searching and responding to potential patients
+ * Threads Keyword Search Service v2.0
+ * НОВЫЙ АЛГОРИТМ:
+ * 1. Поиск по ОДНОМУ слову (остеопат, невролог, грыжа)
+ * 2. Локальная фильтрация по городу (Астана - да, другие города - нет)
+ * 3. Проверка на вопрос/запрос рекомендации
+ * 4. LLM валидация только для прошедших фильтры
  */
 
 const threadsAPI = require('./threads-api');
@@ -17,16 +21,19 @@ try {
 } catch (e) {
     console.log('[Threads] Keywords file not found, using defaults');
     keywordsData = {
-        keywords: [
-            'остеопат астана', 'ищу остеопата', 'посоветуйте остеопата',
-            'невролог астана', 'детский невролог астана',
-            'мануальный терапевт астана', 'мануальная терапия',
-            'боль в спине астана', 'болит спина', 'болит поясница',
-            'грыжа позвоночника', 'межпозвоночная грыжа',
-            'сколиоз астана', 'артроз астана',
-            'зрр астана', 'задержка речи', 'аутизм астана',
-            'посоветуйте врача астана', 'посоветуйте клинику'
-        ]
+        searchKeywords: {
+            medical: { items: ['остеопат', 'невролог', 'мануальщик'] },
+            symptoms: { items: ['грыжа', 'сколиоз', 'артроз'] },
+            children: { items: ['зрр', 'аутизм'] }
+        },
+        targetCity: 'астана',
+        otherCities: ['алматы', 'москва', 'киев'],
+        requirementKeywords: {
+            items: ['посоветуйте', 'ищу', 'нужен', 'подскажите', 'порекомендуйте']
+        },
+        healthKeywords: {
+            items: ['врач', 'боль', 'болит', 'клиник', 'лечени']
+        }
     };
 }
 
@@ -55,15 +62,22 @@ class ThreadsKeywordSearch {
         };
 
         this.lastReplyTime = 0;
+
+        // Cache для keywords
+        this.targetCity = keywordsData.targetCity?.toLowerCase() || 'астана';
+        this.otherCities = (keywordsData.otherCities || []).map(c => c.toLowerCase());
+        this.requirementWords = keywordsData.requirementKeywords?.items || [];
+        this.healthWords = keywordsData.healthKeywords?.items || [];
     }
 
     /**
-     * Get all keywords flattened
+     * Get all search keywords (single words)
      */
     getAllKeywords() {
         const allKeywords = [];
-        for (const category of Object.values(keywordsData.keywords)) {
-            // Check if category is an object with items array
+        const searchKeywords = keywordsData.searchKeywords || {};
+
+        for (const category of Object.values(searchKeywords)) {
             if (category && Array.isArray(category.items)) {
                 allKeywords.push(...category.items);
             }
@@ -105,6 +119,67 @@ class ThreadsKeywordSearch {
     }
 
     /**
+     * НОВЫЙ АЛГОРИТМ: Локальная фильтрация поста
+     * Шаг 1: Проверка города (Астана = хорошо, другой город = плохо)
+     * Шаг 2: Проверка что это вопрос/запрос рекомендации
+     * Шаг 3: Проверка на медицинскую тематику
+     */
+    localFilter(post) {
+        const text = (post.text || '').toLowerCase();
+
+        // === SPAM FILTER ===
+        const spamPatterns = [
+            /продаю|продам|продажа|продаётся/,
+            /скидк[аи]|акция|распродажа/,
+            /подписывайтесь|подпишись|лайк на лайк/,
+            /казино|ставки|букмекер/,
+            /криптовалют|биткоин|трейдинг/,
+            /заработ[окай]|доход|пассивный/,
+            /модел[ья]|фотосессия|портфолио/,
+            /цветы|цветочн|букет/,
+            /адвокат|юрист|нотариус/,
+            /репетитор|курсы|обучение/,
+            /маникюр|педикюр|ресниц|бров/,
+            /ремонт квартир|строительство/,
+            /такси|доставка|курьер/,
+            /одежда|платье|обувь|сумк/,
+            /банкет|свадьб|праздник/,
+            /фильм|кино|сериал|спектакл/,
+            /шопинг|магазин|торгов/,
+        ];
+
+        for (const pattern of spamPatterns) {
+            if (pattern.test(text)) {
+                return { pass: false, reason: `Спам/другая тема: ${pattern.source}` };
+            }
+        }
+
+        // === CITY FILTER ===
+        const hasTargetCity = text.includes(this.targetCity);
+        const hasOtherCity = this.otherCities.some(city => text.includes(city));
+
+        // Если упомянут другой город БЕЗ нашего города - отклоняем
+        if (hasOtherCity && !hasTargetCity) {
+            return { pass: false, reason: 'Упомянут другой город (не Астана)' };
+        }
+
+        // === REQUIREMENT FILTER (посоветуйте, ищу, нужен) ===
+        const hasRequirement = this.requirementWords.some(word => text.includes(word)) || text.includes('?');
+        if (!hasRequirement) {
+            return { pass: false, reason: 'Не вопрос/не ищет рекомендацию' };
+        }
+
+        // === HEALTH FILTER ===
+        const hasHealthWord = this.healthWords.some(word => text.includes(word));
+        if (!hasHealthWord) {
+            return { pass: false, reason: 'Нет медицинских ключевых слов' };
+        }
+
+        // Прошёл все фильтры - отправляем на LLM валидацию
+        return { pass: true, hasTargetCity };
+    }
+
+    /**
      * Run a search cycle
      * @param {number} cycleIndex - Cycle index (0, 1, or 2)
      */
@@ -112,26 +187,41 @@ class ThreadsKeywordSearch {
         console.log(`[Threads Search] Starting cycle ${cycleIndex + 1}/3`);
 
         const keywords = this.getKeywordsForCycle(cycleIndex);
-        console.log(`[Threads Search] Searching ${keywords.length} keywords`);
+        console.log(`[Threads Search] Searching ${keywords.length} keywords: ${keywords.join(', ')}`);
+
+        let totalFound = 0;
+        let totalPassed = 0;
 
         for (const keyword of keywords) {
             try {
-                // Search posts
+                // Search posts by SINGLE keyword
                 const posts = await threadsAPI.keywordSearch(keyword, {
                     search_type: 'RECENT',
                     since: threadsAPI.get24HoursAgo(),
                     limit: 50
                 });
 
-                // Save new posts to database
-                const newCount = await threadsDB.saveNewPosts(posts, keyword);
+                console.log(`[Threads Search] "${keyword}": found ${posts.length} raw posts`);
+                totalFound += posts.length;
+
+                // LOCAL FILTER each post
+                let passedCount = 0;
+                for (const post of posts) {
+                    const filter = this.localFilter(post);
+                    if (filter.pass) {
+                        // Save only posts that passed local filter
+                        const isNew = await threadsDB.saveNewPosts([post], keyword);
+                        if (isNew > 0) {
+                            passedCount++;
+                            console.log(`[Threads Search] ✓ Passed: @${post.username} - "${post.text?.substring(0, 50)}..."`);
+                        }
+                    }
+                }
+
+                totalPassed += passedCount;
 
                 // Log API request
-                await threadsDB.logApiRequest(keyword, posts.length, newCount);
-
-                if (newCount > 0) {
-                    console.log(`[Threads Search] "${keyword}": ${newCount} new posts found`);
-                }
+                await threadsDB.logApiRequest(keyword, posts.length, passedCount);
 
                 // Delay between requests
                 await threadsAPI.sleep(this.config.delayBetweenRequests);
@@ -140,14 +230,16 @@ class ThreadsKeywordSearch {
             }
         }
 
-        // Process new posts
+        console.log(`[Threads Search] Cycle summary: ${totalFound} raw → ${totalPassed} passed filter`);
+
+        // Process new posts with LLM validation
         await this.processNewPosts();
 
         console.log(`[Threads Search] Cycle ${cycleIndex + 1} completed`);
     }
 
     /**
-     * Process all new posts - validate and reply
+     * Process all new posts - LLM validate and reply
      */
     async processNewPosts() {
         if (!this.isWorkingHours()) {
@@ -156,28 +248,21 @@ class ThreadsKeywordSearch {
         }
 
         const newPosts = await threadsDB.getPostsByStatus('new', 20);
-        console.log(`[Threads Search] Processing ${newPosts.length} new posts`);
+        console.log(`[Threads Search] LLM validating ${newPosts.length} posts`);
 
         for (const post of newPosts) {
-            // Step 1: Rule-based pre-filter (FREE - no tokens)
-            const preFilter = this.preFilterPost(post);
-            if (!preFilter.pass) {
-                await threadsDB.updatePostStatus(post.id, 'skipped', {
-                    validation_result: { valid: false, reason: preFilter.reason, prefiltered: true }
-                });
-                console.log(`[Threads Search] Pre-filtered: ${preFilter.reason}`);
-                continue;
-            }
-
-            // Step 2: LLM validation (only for posts that passed pre-filter)
+            // LLM validation (only for posts that passed local filter)
             const validation = await this.validatePost(post);
 
             if (!validation.valid) {
                 await threadsDB.updatePostStatus(post.id, 'skipped', {
                     validation_result: validation
                 });
+                console.log(`[Threads Search] LLM rejected: ${validation.reason}`);
                 continue;
             }
+
+            console.log(`[Threads Search] ✓ LLM validated: ${validation.matchedService}`);
 
             // Check if we can reply
             if (!await this.canReplyToday()) {
@@ -224,69 +309,7 @@ class ThreadsKeywordSearch {
     }
 
     /**
-     * Rule-based pre-filter (FREE - no tokens)
-     * Filters out obvious spam/irrelevant posts
-     */
-    preFilterPost(post) {
-        const text = (post.text || '').toLowerCase();
-
-        // Spam indicators - skip these
-        const spamPatterns = [
-            /продаю|продам|продажа|продаётся/,     // selling
-            /скидк[аи]|акция|распродажа/,          // discounts/sales  
-            /подписывайтесь|подпишись|лайк/,       // follow/like begging
-            /реклама|рекламный/,                   // advertising
-            /казино|ставки|букмекер/,              // gambling
-            /криптовалют|биткоин|трейдинг/,        // crypto
-            /заработ[окай]|доход|пассивный/,       // income schemes
-            /модел[ья]|фотосессия|портфолио/,      // modeling
-            /цветы|цветочн|букет/,                 // flowers
-            /адвокат|юрист|нотариус/,              // legal
-            /репетитор|курсы|обучение/,            // tutoring
-            /маникюр|педикюр|ресниц/,              // beauty
-            /ремонт квартир|строительство/,        // construction
-            /такси|доставка|курьер/,               // delivery
-            /пеньюар|нижнее белье|одежда/,         // clothing
-        ];
-
-        for (const pattern of spamPatterns) {
-            if (pattern.test(text)) {
-                return { pass: false, reason: `Спам/реклама: ${pattern.source}` };
-            }
-        }
-
-        // Must contain health-related keywords
-        const healthKeywords = [
-            'врач', 'доктор', 'клиник', 'больниц', 'медицин',
-            'боль', 'болит', 'лечени', 'лечить', 'диагноз',
-            'спин', 'позвоноч', 'грыж', 'сколиоз', 'артроз', 'артрит',
-            'невролог', 'остеопат', 'мануальн', 'терапевт', 'ревматолог',
-            'массаж', 'физиотерап', 'реабилитац',
-            'мрт', 'узи', 'рентген', 'томограф',
-            'ребёнок', 'ребенок', 'детск', 'зпр', 'зрр', 'аутизм', 'логопед',
-            'посоветуйте', 'подскажите', 'порекомендуйте', 'ищу',
-            'голов', 'мигрен', 'давлени', 'сустав', 'колен', 'шея'
-        ];
-
-        const hasHealthKeyword = healthKeywords.some(kw => text.includes(kw));
-        if (!hasHealthKeyword) {
-            return { pass: false, reason: 'Нет медицинских ключевых слов' };
-        }
-
-        // Check for question indicators
-        const isQuestion = text.includes('?') ||
-            /кто знает|подскажите|посоветуйте|порекомендуйте|где найти|ищу|нужен/.test(text);
-
-        if (!isQuestion) {
-            return { pass: false, reason: 'Не вопрос/не ищет рекомендацию' };
-        }
-
-        // Passed pre-filter - send to LLM
-        return { pass: true };
-    }
-
-    /**
-     * Validate if post is relevant for the clinic
+     * Validate if post is relevant for the clinic (LLM)
      */
     async validatePost(post) {
         const prompt = `

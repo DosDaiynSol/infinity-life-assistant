@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: olx_clone
+      POSTGRES_USER: olx_user
+      POSTGRES_PASSWORD: olx_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U olx_user -d olx_clone"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./backend:/app
+      - ./backend/media:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

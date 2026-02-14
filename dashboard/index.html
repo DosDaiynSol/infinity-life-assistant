@@ -244,22 +244,22 @@
 
       <!-- Threads Stats Grid -->
       <div class="stats-grid">
-        <div class="stat-card threads-card">
+        <div class="stat-card threads-card clickable" onclick="switchThreadsTab('new')">
           <div class="stat-icon">🔍</div>
           <div class="stat-value" id="threadsApiRequests">0</div>
           <div class="stat-label">API запросов</div>
         </div>
-        <div class="stat-card threads-card">
+        <div class="stat-card threads-card clickable" onclick="switchThreadsTab('new')">
           <div class="stat-icon">📝</div>
           <div class="stat-value" id="threadsPostsFound">0</div>
           <div class="stat-label">Постов найдено</div>
         </div>
-        <div class="stat-card threads-card">
+        <div class="stat-card threads-card clickable" onclick="switchThreadsTab('validated')">
           <div class="stat-icon">✅</div>
           <div class="stat-value" id="threadsValidated">0</div>
           <div class="stat-label">Валидных</div>
         </div>
-        <div class="stat-card threads-card">
+        <div class="stat-card threads-card clickable" onclick="switchThreadsTab('replied')">
           <div class="stat-icon">💬</div>
           <div class="stat-value" id="threadsReplied">0</div>
           <div class="stat-label" id="threadsConversion">0% конверсия</div>
