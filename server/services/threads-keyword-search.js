@@ -13,13 +13,31 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 
-// Load keywords with fallback
+// Load keywords with multiple path fallbacks
 let keywordsData;
-try {
-    const keywordsPath = path.join(__dirname, '../../data/threads_keywords.json');
-    keywordsData = JSON.parse(fs.readFileSync(keywordsPath, 'utf-8'));
-} catch (e) {
-    console.log('[Threads] Keywords file not found, using defaults');
+const keywordsPaths = [
+    path.join(__dirname, '../../data/threads_keywords.json'),
+    path.join(process.cwd(), 'data/threads_keywords.json'),
+    path.resolve('data/threads_keywords.json')
+];
+let keywordsLoaded = false;
+for (const kp of keywordsPaths) {
+    try {
+        keywordsData = JSON.parse(fs.readFileSync(kp, 'utf-8'));
+        console.log(`[Threads] ✓ Keywords loaded from: ${kp}`);
+        let total = 0;
+        for (const cat of Object.values(keywordsData.searchKeywords || {})) {
+            if (cat && Array.isArray(cat.items)) total += cat.items.length;
+        }
+        console.log(`[Threads] ✓ Total medical keywords: ${total}`);
+        keywordsLoaded = true;
+        break;
+    } catch (e) {
+        console.log(`[Threads] Keywords not found at: ${kp}`);
+    }
+}
+if (!keywordsLoaded) {
+    console.error('[Threads] ⚠️ Keywords file not found at any path, using defaults');
     keywordsData = {
         searchKeywords: {
             doctors: { items: ['остеопат', 'невролог', 'мануальщик'] },
@@ -38,12 +56,23 @@ try {
     };
 }
 
-// Load clinic data for context
+// Load clinic data with fallback
 let clinicData;
-try {
-    const clinicPath = path.join(__dirname, '../../data/clinic_data.json');
-    clinicData = JSON.parse(fs.readFileSync(clinicPath, 'utf-8'));
-} catch (e) {
+const clinicPaths = [
+    path.join(__dirname, '../../data/clinic_data.json'),
+    path.join(process.cwd(), 'data/clinic_data.json'),
+    path.resolve('data/clinic_data.json')
+];
+let clinicLoaded = false;
+for (const cp of clinicPaths) {
+    try {
+        clinicData = JSON.parse(fs.readFileSync(cp, 'utf-8'));
+        console.log(`[Threads] ✓ Clinic data loaded from: ${cp}`);
+        clinicLoaded = true;
+        break;
+    } catch (e) { /* try next */ }
+}
+if (!clinicLoaded) {
     console.log('[Threads] Clinic data not found, using defaults');
     clinicData = { clinic: { name: 'INFINITY LIFE', contactPhone: '87470953952' } };
 }
@@ -66,6 +95,7 @@ class ThreadsKeywordSearch extends EventEmitter {
         this.lastReplyTime = 0;
         this.searchLog = []; // Stores the latest search log for frontend
         this.isSearching = false;
+        this.shouldStop = false; // Flag for manual stop
 
         // Cache для keywords
         this.cityKeyword = keywordsData.cityKeyword || keywordsData.targetCity || 'астана';
@@ -267,6 +297,7 @@ class ThreadsKeywordSearch extends EventEmitter {
         }
 
         this.isSearching = true;
+        this.shouldStop = false; // Reset stop flag
         this.searchLog = []; // Reset log
 
         console.log(`\n[Threads Search] ========== Cycle ${cycleIndex + 1}/3 START ==========`);
@@ -283,6 +314,9 @@ class ThreadsKeywordSearch extends EventEmitter {
         let totalNewSaved = 0;
         let totalDuplicate = 0;
         let apiRequests = 0;
+        let summary_validated = 0;
+        let summary_rejected = 0;
+        let summary_replied = 0;
 
         try {
             // ====== PHASE 1: Search "Астана" ======
@@ -310,6 +344,14 @@ class ThreadsKeywordSearch extends EventEmitter {
                 message: `🔍 "${this.cityKeyword}": найдено ${cityResult.found}, после фильтра ${cityResult.passed}, новых ${cityResult.newSaved}, дубли ${cityResult.duplicate}`
             });
 
+            // Check stop flag after phase 1
+            if (this.shouldStop) {
+                this._emitLog({ type: 'info', message: '⏹️ Поиск остановлен вручную (после фазы 1)' });
+                this.isSearching = false;
+                this._emitLog({ type: 'end', message: '⏹️ Поиск остановлен' });
+                return;
+            }
+
             // Delay
             await threadsAPI.sleep(this.config.delayBetweenRequests);
 
@@ -323,6 +365,12 @@ class ThreadsKeywordSearch extends EventEmitter {
             });
 
             for (let i = 0; i < medicalKeywords.length; i++) {
+                // Check stop flag before each keyword
+                if (this.shouldStop) {
+                    this._emitLog({ type: 'info', message: `⏹️ Поиск остановлен вручную (после ${i}/${medicalKeywords.length} тегов)` });
+                    break;
+                }
+
                 const keyword = medicalKeywords[i];
                 try {
                     const result = await this._searchKeyword(keyword, 'medical');
@@ -356,14 +404,19 @@ class ThreadsKeywordSearch extends EventEmitter {
                 }
             }
 
-            // ====== LLM Validation ======
-            this._emitLog({
-                type: 'phase',
-                phase: 3,
-                message: `🤖 Фаза 3: LLM валидация + автоответы`
-            });
+            // ====== LLM Validation (skip if stopped) ======
+            if (!this.shouldStop) {
+                this._emitLog({
+                    type: 'phase',
+                    phase: 3,
+                    message: `🤖 Фаза 3: LLM валидация + автоответы`
+                });
 
-            const validationResult = await this.processNewPosts();
+                const validationResult = await this.processNewPosts();
+                summary_validated = validationResult.validated;
+                summary_rejected = validationResult.rejected;
+                summary_replied = validationResult.replied;
+            }
 
             // ====== Summary ======
             const summary = {
@@ -374,11 +427,12 @@ class ThreadsKeywordSearch extends EventEmitter {
                 passedLocalFilter: totalPassedFilter,
                 newSaved: totalNewSaved,
                 duplicates: totalDuplicate,
-                llmValidated: validationResult.validated,
-                llmRejected: validationResult.rejected,
-                replied: validationResult.replied,
+                llmValidated: summary_validated,
+                llmRejected: summary_rejected,
+                replied: summary_replied,
+                stopped: this.shouldStop,
                 timestamp: new Date().toISOString(),
-                message: `📊 Итого: ${apiRequests} API запросов, ${totalFound} найдено, ${totalPassedFilter} после фильтра, ${totalNewSaved} новых, ${validationResult.validated} валидных, ${validationResult.replied} ответов`
+                message: `📊 Итого: ${apiRequests} API запросов, ${totalFound} найдено, ${totalPassedFilter} после фильтра, ${totalNewSaved} новых, ${summary_validated} валидных, ${summary_replied} ответов${this.shouldStop ? ' (остановлено)' : ''}`
             };
 
             this._emitLog(summary);
@@ -402,6 +456,19 @@ class ThreadsKeywordSearch extends EventEmitter {
     }
 
     /**
+     * Stop an in-progress search
+     */
+    stopSearch() {
+        if (this.isSearching) {
+            this.shouldStop = true;
+            console.log('[Threads Search] Stop requested by user');
+            this._emitLog({ type: 'info', message: '⏹️ Остановка поиска...' });
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Search a single keyword and apply the appropriate filter
      * @param {string} keyword - Keyword to search
      * @param {string} phase - 'city' or 'medical'
@@ -411,7 +478,7 @@ class ThreadsKeywordSearch extends EventEmitter {
         const posts = await threadsAPI.keywordSearch(keyword, {
             search_type: 'RECENT',
             since: threadsAPI.get24HoursAgo(),
-            limit: 50
+            limit: 100
         });
 
         let found = posts.length;

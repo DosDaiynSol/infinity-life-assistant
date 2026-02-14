@@ -728,6 +728,7 @@ function showThreadsMetric(metric) {
 // Run search with SSE log streaming
 async function threadsRunSearch() {
   const btn = document.getElementById('btnThreadsSearch');
+  const stopBtn = document.getElementById('btnThreadsStop');
   btn.textContent = '⏳ Запуск...';
   btn.classList.add('loading');
 
@@ -738,7 +739,8 @@ async function threadsRunSearch() {
     if (data.status === 'already_searching') {
       btn.textContent = '⏳ Уже ищет...';
     } else {
-      btn.textContent = '⏳ Поиск идёт...';
+      btn.style.display = 'none';
+      stopBtn.style.display = 'inline-block';
     }
 
     // Connect to SSE for real-time log
@@ -751,6 +753,31 @@ async function threadsRunSearch() {
       btn.classList.remove('loading');
     }, 2000);
   }
+}
+
+// Stop search
+async function threadsStopSearch() {
+  const stopBtn = document.getElementById('btnThreadsStop');
+  stopBtn.textContent = '⏳ Остановка...';
+  stopBtn.classList.add('loading');
+
+  try {
+    await fetch(`${API_BASE}/api/threads/search/stop`, { method: 'POST' });
+  } catch (error) {
+    console.error('Stop search error:', error);
+  }
+}
+
+// Reset buttons back to default state
+function threadsResetSearchButtons() {
+  const btn = document.getElementById('btnThreadsSearch');
+  const stopBtn = document.getElementById('btnThreadsStop');
+  btn.textContent = '🔍 Запустить поиск';
+  btn.classList.remove('loading');
+  btn.style.display = 'inline-block';
+  stopBtn.style.display = 'none';
+  stopBtn.textContent = '⏹ Остановить';
+  stopBtn.classList.remove('loading');
 }
 
 // Connect to SSE stream for real-time search log
@@ -785,10 +812,8 @@ function threadsConnectSSE() {
     threadsSSE = null;
     logStatus.textContent = '✅ Завершено';
 
-    // Reset button
-    const btn = document.getElementById('btnThreadsSearch');
-    btn.textContent = '🔍 Запустить поиск';
-    btn.classList.remove('loading');
+    // Reset buttons
+    threadsResetSearchButtons();
 
     // Refresh data
     loadThreadsStatus();
@@ -867,12 +892,10 @@ function threadsRenderLogEntry(entry) {
   }
 
   if (entry.type === 'end') {
-    logStatus.textContent = '✅ Завершено';
+    logStatus.textContent = entry.message.includes('остановлен') ? '⏹️ Остановлено' : '✅ Завершено';
 
-    // Reset button
-    const btn = document.getElementById('btnThreadsSearch');
-    btn.textContent = '🔍 Запустить поиск';
-    btn.classList.remove('loading');
+    // Reset buttons
+    threadsResetSearchButtons();
 
     // Disconnect SSE
     if (threadsSSE) {

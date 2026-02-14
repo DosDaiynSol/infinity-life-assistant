@@ -1114,11 +1114,12 @@ body {
    Threads Search Log Panel
    ========================================== */
 .threads-search-log {
-  background: #1a1b2e;
+  background: var(--bg-card);
   border-radius: 12px;
   margin-bottom: 1.5rem;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 
 .threads-log-header {
@@ -1126,25 +1127,25 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1rem;
-  background: #252640;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border);
 }
 
 .threads-log-title {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.9rem;
 }
 
 .threads-log-status {
   font-size: 0.8rem;
-  color: #a0a0c0;
+  color: var(--text-muted);
 }
 
 .threads-log-close {
   background: none;
   border: none;
-  color: #666;
+  color: var(--text-muted);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.2rem 0.5rem;
@@ -1153,8 +1154,8 @@ body {
 }
 
 .threads-log-close:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  background: var(--bg-main);
 }
 
 .threads-log-body {
@@ -1171,17 +1172,17 @@ body {
 }
 
 .threads-log-body::-webkit-scrollbar-track {
-  background: #1a1b2e;
+  background: var(--bg-main);
 }
 
 .threads-log-body::-webkit-scrollbar-thumb {
-  background: #3a3b5e;
+  background: var(--border);
   border-radius: 3px;
 }
 
 .threads-log-entry {
   padding: 0.2rem 0;
-  color: #c0c0d0;
+  color: var(--text-secondary);
   animation: fadeInLog 0.3s ease;
 }
 
@@ -1198,59 +1199,59 @@ body {
 }
 
 .threads-log-entry.log-start {
-  color: #60a5fa;
+  color: var(--accent);
   font-weight: 600;
   padding: 0.4rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   margin-bottom: 0.3rem;
 }
 
 .threads-log-entry.log-phase {
-  color: #fbbf24;
+  color: var(--accent-dark);
   font-weight: 600;
   padding: 0.5rem 0 0.2rem;
   margin-top: 0.3rem;
 }
 
 .threads-log-entry.log-keyword {
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .threads-log-entry.log-keyword.has-new {
-  color: #34d399;
+  color: var(--success);
   font-weight: 500;
 }
 
 .threads-log-entry.log-validated {
-  color: #22c55e;
+  color: var(--success);
   font-weight: 500;
 }
 
 .threads-log-entry.log-replied {
-  color: #a78bfa;
+  color: var(--accent);
   font-weight: 600;
 }
 
 .threads-log-entry.log-error {
-  color: #f87171;
+  color: var(--error);
   font-weight: 500;
 }
 
 .threads-log-entry.log-info {
-  color: #60a5fa;
+  color: var(--accent);
 }
 
 .threads-log-empty {
-  color: #555;
+  color: var(--text-muted);
   text-align: center;
   padding: 2rem;
 }
 
 /* Log Summary Grid */
 .threads-log-summary {
-  background: #252640;
+  background: var(--bg-main);
   padding: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border);
 }
 
 .threads-summary-grid {
@@ -1273,22 +1274,22 @@ body {
   display: block;
   font-size: 1.4rem;
   font-weight: 700;
-  color: #e0e0f0;
+  color: var(--text-primary);
 }
 
 .threads-summary-label {
   display: block;
   font-size: 0.7rem;
-  color: #8888aa;
+  color: var(--text-muted);
   margin-top: 0.2rem;
 }
 
 .threads-summary-item.highlight .threads-summary-value {
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .threads-summary-item.success .threads-summary-value {
-  color: #22c55e;
+  color: var(--success);
 }
 
 /* ==========================================

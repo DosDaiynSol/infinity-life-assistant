@@ -777,6 +777,12 @@ app.post('/api/threads/search', async (req, res) => {
   }
 });
 
+// Stop an in-progress search
+app.post('/api/threads/search/stop', (req, res) => {
+  const stopped = threadsKeywordSearch.stopSearch();
+  res.json({ status: stopped ? 'stopping' : 'not_searching', message: stopped ? 'Остановка поиска...' : 'Поиск не запущен' });
+});
+
 // Manual trigger - validate new posts only (no new search)
 app.post('/api/threads/validate', async (req, res) => {
   try {
