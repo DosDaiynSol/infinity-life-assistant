@@ -412,7 +412,7 @@ async function loadYouTubeStatus() {
       status.textContent = 'Не авторизован ❌';
     }
 
-    updateText('ytPollingInterval', data.pollingInterval || '5 мин');
+    updateText('ytSchedule', data.schedule || '10:00 ежедневно');
     updateText('ytLastProcessed', data.stats?.lastProcessed
       ? new Date(data.stats.lastProcessed).toLocaleTimeString('ru-RU')
       : '-');
@@ -485,26 +485,26 @@ async function loadYouTubeVideos() {
 
 async function ytProcessChannel() {
   const btn = document.getElementById('btnYtProcess');
-  btn.textContent = '⏳ Обрабатываю...';
+  btn.textContent = '⏳ Проверяю...';
   btn.classList.add('loading');
 
   try {
     await fetch(`${API_BASE}/api/youtube/process-channel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoCount: 5 })
+      body: JSON.stringify({ videoCount: 10 })
     });
     btn.textContent = '✅ Готово!';
     await loadYouTubeData();
 
     setTimeout(() => {
-      btn.textContent = '▶️ Обработать канал';
+      btn.textContent = '🔍 Проверить комментарии';
       btn.classList.remove('loading');
     }, 2000);
   } catch (error) {
     btn.textContent = '❌ Ошибка';
     setTimeout(() => {
-      btn.textContent = '▶️ Обработать канал';
+      btn.textContent = '🔍 Проверить комментарии';
       btn.classList.remove('loading');
     }, 2000);
   }

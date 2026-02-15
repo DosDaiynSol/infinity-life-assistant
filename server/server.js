@@ -20,6 +20,7 @@ const googleReviewsHandler = require('./handlers/google-reviews');
 
 // Threads Keyword Search services
 const threadsKeywordSearch = require('./services/threads-keyword-search');
+const crossPostService = require('./services/crosspost-service');
 const schedule = require('node-schedule');
 
 const app = express();
@@ -88,20 +89,19 @@ async function processBuffer() {
 // Auto-process buffer every minute (Instagram)
 setInterval(processBuffer, 60000);
 
-// YouTube auto-polling - every 5 minutes
-const YOUTUBE_POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+// YouTube daily check at 10:00 AM (instead of 5-min polling)
 let youtubeLastProcessed = null;
 
-async function processYouTubeComments() {
+async function processYouTubeComments(videoCount = 10) {
   if (!youtubeOAuth.isAuthorized()) {
-    console.log('[YouTube Polling] Not authorized, skipping...');
+    console.log('[YouTube Check] Not authorized, skipping...');
     return { processed: 0, responded: 0 };
   }
 
-  console.log(`[${new Date().toISOString()}] [YouTube Polling] Starting...`);
+  console.log(`[${new Date().toISOString()}] [YouTube Check] Starting (${videoCount} videos)...`);
 
   try {
-    const result = await youtubeHandler.processChannelComments(5); // Last 5 videos
+    const result = await youtubeHandler.processChannelComments(videoCount);
     youtubeLastProcessed = new Date().toISOString();
 
     // Add to persistent stats
@@ -126,18 +126,21 @@ async function processYouTubeComments() {
       }
     }
 
-    console.log(`[YouTube Polling] Done. Replied to ${result.totalReplied || 0} comments.`);
+    console.log(`[YouTube Check] Done. Replied to ${result.totalReplied || 0} comments.`);
     return result;
   } catch (error) {
-    console.error('[YouTube Polling] Error:', error.message);
+    console.error('[YouTube Check] Error:', error.message);
     return { error: error.message };
   }
 }
 
-// Start YouTube polling
-setInterval(processYouTubeComments, YOUTUBE_POLL_INTERVAL);
-// Also run once after 30 seconds of server start
-setTimeout(processYouTubeComments, 30000);
+// Schedule YouTube daily check at 10:00 AM
+schedule.scheduleJob('0 10 * * *', async () => {
+  console.log('[YouTube Schedule] Running daily comment check (10:00)');
+  await processYouTubeComments(10);
+});
+// Also run once 30s after server start
+setTimeout(() => processYouTubeComments(10), 30000);
 
 function tryParseJson(value) {
   if (typeof value !== 'string') return value;
@@ -400,7 +403,7 @@ app.get('/api/youtube/status', async (req, res) => {
     res.json({
       authorized: youtubeOAuth.isAuthorized(),
       channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
-      pollingInterval: YOUTUBE_POLL_INTERVAL / 1000 / 60 + ' minutes',
+      schedule: 'Ежедневно в 10:00',
       stats: {
         ...youtubeHandler.getStats(),
         totalComments: ytStats.totalComments,
@@ -812,6 +815,63 @@ schedule.scheduleJob('0 20 * * *', async () => {
   await threadsKeywordSearch.runSearchCycle(2);
 });
 
+// ==========================================
+// Cross-Posting API Routes
+// ==========================================
+
+// CrossPost status
+app.get('/api/crosspost/status', async (req, res) => {
+  try {
+    const status = await crossPostService.getQueueStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual trigger - run poll cycle now
+app.post('/api/crosspost/poll', async (req, res) => {
+  try {
+    if (crossPostService.isPolling) {
+      return res.json({ status: 'already_polling', message: 'Polling уже запущен' });
+    }
+
+    console.log('[CrossPost] Manual poll triggered');
+    res.json({ status: 'started', message: 'Polling запущен' });
+
+    // Run async
+    crossPostService.runPollCycle().then(result => {
+      console.log('[CrossPost] Manual poll result:', JSON.stringify(result));
+    }).catch(err => {
+      console.error('[CrossPost] Manual poll error:', err.message);
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Retry failed cross-posts
+app.post('/api/crosspost/retry', async (req, res) => {
+  try {
+    const result = await crossPostService.retryFailed();
+    res.json({ status: 'ok', ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Schedule CrossPost polling every 5 minutes
+schedule.scheduleJob('*/5 * * * *', async () => {
+  console.log('[CrossPost Schedule] Running poll cycle...');
+  await crossPostService.runPollCycle();
+});
+
+// Also run once 60s after server start
+setTimeout(() => {
+  console.log('[CrossPost] Initial poll after startup...');
+  crossPostService.runPollCycle();
+}, 60000);
+
 // Dashboard route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
@@ -828,5 +888,6 @@ app.listen(PORT, () => {
   console.log(`⏱️  Buffer processing: every 60 seconds`);
   console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}`);
   console.log(`📍 Google Business authorized: ${googleBusinessOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/google'}`);
-  console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00\n`);
+  console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00`);
+  console.log(`🔄 CrossPost polling: every 5 minutes\n`);
 });
