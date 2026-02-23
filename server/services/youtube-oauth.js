@@ -127,7 +127,8 @@ class YouTubeOAuth {
     // Generate OAuth URL for user authorization
     getAuthUrl() {
         const scopes = [
-            'https://www.googleapis.com/auth/youtube.force-ssl' // Required for comment replies
+            'https://www.googleapis.com/auth/youtube.force-ssl', // Required for comment replies
+            'https://www.googleapis.com/auth/youtube.upload'     // Required for video uploads (Shorts)
         ].join(' ');
 
         const params = new URLSearchParams({

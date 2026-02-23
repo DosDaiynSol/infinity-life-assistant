@@ -52,7 +52,7 @@ class YouTubeAPI {
         }
     }
 
-    // Get channel videos
+    // Get channel videos (maxResults=0 means ALL videos)
     async getChannelVideos(maxResults = 10) {
         try {
             const headers = await this.getAuthHeaders();
@@ -71,23 +71,43 @@ class YouTubeAPI {
                 throw new Error('Could not find uploads playlist');
             }
 
-            // Get videos from uploads playlist
-            const videosResponse = await axios.get(`${YOUTUBE_API_BASE}/playlistItems`, {
-                headers,
-                params: {
+            const allVideos = [];
+            let pageToken = null;
+            const fetchAll = maxResults === 0;
+            const perPage = fetchAll ? 50 : Math.min(maxResults, 50);
+
+            do {
+                const params = {
                     part: 'snippet',
                     playlistId: uploadsPlaylistId,
-                    maxResults
-                }
-            });
+                    maxResults: perPage
+                };
+                if (pageToken) params.pageToken = pageToken;
 
-            return videosResponse.data.items.map(item => ({
-                id: item.snippet.resourceId.videoId,
-                title: item.snippet.title,
-                description: item.snippet.description,
-                publishedAt: item.snippet.publishedAt,
-                thumbnail: item.snippet.thumbnails?.medium?.url
-            }));
+                const videosResponse = await axios.get(`${YOUTUBE_API_BASE}/playlistItems`, {
+                    headers,
+                    params
+                });
+
+                const videos = videosResponse.data.items.map(item => ({
+                    id: item.snippet.resourceId.videoId,
+                    title: item.snippet.title,
+                    description: item.snippet.description,
+                    publishedAt: item.snippet.publishedAt,
+                    thumbnail: item.snippet.thumbnails?.medium?.url
+                }));
+                allVideos.push(...videos);
+
+                pageToken = videosResponse.data.nextPageToken;
+
+                // If not fetching all, stop after first page
+                if (!fetchAll) break;
+
+                console.log(`[YouTube API] Fetched ${allVideos.length} videos so far...`);
+            } while (pageToken);
+
+            console.log(`[YouTube API] Total videos fetched: ${allVideos.length}`);
+            return allVideos;
         } catch (error) {
             console.error('[YouTube API] Error getting channel videos:', error.response?.data || error.message);
             throw error;

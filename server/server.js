@@ -104,29 +104,11 @@ async function processYouTubeComments(videoCount = 10) {
     const result = await youtubeHandler.processChannelComments(videoCount);
     youtubeLastProcessed = new Date().toISOString();
 
-    // Add to persistent stats
-    for (const videoResult of result.results || []) {
-      if (videoResult.results) {
-        for (const comment of videoResult.results) {
-          if (comment.responded) {
-            statsManager.trackYouTubeResponse(videoResult.videoId, 1);
-            statsManager.addYouTubeHistory({
-              videoId: videoResult.videoId,
-              videoTitle: videoResult.videoTitle,
-              author: comment.author,
-              comment: comment.text,
-              response: comment.response,
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-      }
-      if (videoResult.videoId) {
-        statsManager.trackYouTubeComment(videoResult.videoId);
-      }
-    }
-
-    console.log(`[YouTube Check] Done. Replied to ${result.totalReplied || 0} comments.`);
+    // Stats are tracked inside youtube handler (saved to youtube_processed_comments)
+    // Just log summary here
+    const totalProcessed = result.results?.reduce((sum, r) => (r.processedCount || 0) + sum, 0) || 0;
+    const totalReplied = result.totalReplied || 0;
+    console.log(`[YouTube Check] Done. Processed ${totalProcessed} comments, replied to ${totalReplied}.`);
     return result;
   } catch (error) {
     console.error('[YouTube Check] Error:', error.message);
@@ -137,18 +119,18 @@ async function processYouTubeComments(videoCount = 10) {
 // Schedule YouTube checks 3 times per day: 08:00, 14:00, 20:00
 schedule.scheduleJob('0 8 * * *', async () => {
   console.log('[YouTube Schedule] Running comment check (08:00)');
-  await processYouTubeComments(20);
+  await processYouTubeComments(0);
 });
 schedule.scheduleJob('0 14 * * *', async () => {
   console.log('[YouTube Schedule] Running comment check (14:00)');
-  await processYouTubeComments(20);
+  await processYouTubeComments(0);
 });
 schedule.scheduleJob('0 20 * * *', async () => {
   console.log('[YouTube Schedule] Running comment check (20:00)');
-  await processYouTubeComments(20);
+  await processYouTubeComments(0);
 });
 // Also run once 30s after server start
-setTimeout(() => processYouTubeComments(20), 30000);
+setTimeout(() => processYouTubeComments(0), 30000);
 
 function tryParseJson(value) {
   if (typeof value !== 'string') return value;
@@ -407,17 +389,39 @@ app.get('/auth/youtube/callback', async (req, res) => {
 // YouTube status check
 app.get('/api/youtube/status', async (req, res) => {
   try {
-    const ytStats = await statsManager.getYouTubeStats();
+    // Get real counts from youtube_processed_comments
+    const supabase = youtubeHandler.supabase;
+    let totalComments = 0, totalResponses = 0, processedVideos = 0;
+
+    if (supabase) {
+      const { count: commentsCount } = await supabase
+        .from('youtube_processed_comments')
+        .select('*', { count: 'exact', head: true });
+      totalComments = commentsCount || 0;
+
+      const { count: respondedCount } = await supabase
+        .from('youtube_processed_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('responded', true);
+      totalResponses = respondedCount || 0;
+
+      const { data: videos } = await supabase
+        .from('youtube_processed_comments')
+        .select('video_id')
+        .not('video_id', 'is', null);
+      processedVideos = new Set(videos?.map(v => v.video_id) || []).size;
+    }
+
     res.json({
       authorized: youtubeOAuth.isAuthorized(),
       channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
       schedule: '3 раза в день: 08:00, 14:00, 20:00',
       stats: {
         ...youtubeHandler.getStats(),
-        totalComments: ytStats.totalComments,
-        totalResponses: ytStats.totalResponses,
-        lastProcessed: youtubeLastProcessed || ytStats.lastUpdated,
-        processedVideos: ytStats.processedVideos
+        totalComments,
+        totalResponses,
+        lastProcessed: youtubeLastProcessed,
+        processedVideos
       }
     });
   } catch (error) {
@@ -426,9 +430,33 @@ app.get('/api/youtube/status', async (req, res) => {
   }
 });
 
-// YouTube history
-app.get('/api/youtube/history', (req, res) => {
-  res.json(statsManager.getYouTubeHistory().slice().reverse());
+// YouTube history (from Supabase)
+app.get('/api/youtube/history', async (req, res) => {
+  try {
+    const supabase = youtubeHandler.supabase;
+    if (!supabase) return res.json([]);
+
+    const { data } = await supabase
+      .from('youtube_processed_comments')
+      .select('*')
+      .eq('responded', true)
+      .order('processed_at', { ascending: false })
+      .limit(50);
+
+    const history = (data || []).map(row => ({
+      videoId: row.video_id,
+      videoTitle: row.video_id, // we don't store title in this table
+      author: row.author,
+      comment: row.comment_text,
+      response: row.response_text,
+      timestamp: row.processed_at
+    }));
+
+    res.json(history);
+  } catch (error) {
+    console.error('[API] YouTube history error:', error.message);
+    res.json([]);
+  }
 });
 
 // Get video comments
@@ -475,8 +503,8 @@ app.post('/api/youtube/process-video', async (req, res) => {
 // Process comments for all recent videos
 app.post('/api/youtube/process-channel', async (req, res) => {
   try {
-    const { videoCount = 5 } = req.body;
-    console.log(`[YouTube API] Manual trigger: processing ${videoCount} recent videos`);
+    const { videoCount = 0 } = req.body;
+    console.log(`[YouTube API] Manual trigger: processing ${videoCount === 0 ? 'ALL' : videoCount} videos`);
     const result = await youtubeHandler.processChannelComments(videoCount);
     res.json({ status: 'ok', ...result });
   } catch (error) {

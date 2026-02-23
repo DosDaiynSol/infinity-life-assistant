@@ -492,7 +492,7 @@ async function ytProcessChannel() {
     await fetch(`${API_BASE}/api/youtube/process-channel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoCount: 10 })
+      body: JSON.stringify({ videoCount: 0 })
     });
     btn.textContent = '✅ Готово!';
     await loadYouTubeData();

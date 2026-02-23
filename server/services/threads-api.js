@@ -14,7 +14,21 @@ class ThreadsService {
         this.userId = process.env.THREADS_USER_ID;
         this.accessToken = process.env.THREADS_ACCESS_TOKEN;
         this.supabase = null;
+        this.tokenExpired = false;
+        this.tokenError = null;
         this._initPromise = this._init();
+    }
+
+    /**
+     * Get token status for frontend display
+     */
+    getTokenStatus() {
+        return {
+            hasToken: !!this.accessToken,
+            expired: this.tokenExpired,
+            error: this.tokenError,
+            userId: this.userId
+        };
     }
 
     async _init() {
@@ -43,9 +57,10 @@ class ThreadsService {
                     this.accessToken = data.access_token;
                     console.log('[Threads API] Token loaded from Supabase');
 
-                    // Check if token needs refresh (expires within 7 days)
-                    if (data.expires_at && data.expires_at - Date.now() < 7 * 24 * 60 * 60 * 1000) {
-                        console.log('[Threads API] Token expiring soon, refreshing...');
+                    // Check if token needs refresh (expires within 7 days or expires_at is null)
+                    const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : null;
+                    if (!expiresAt || expiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000) {
+                        console.log('[Threads API] Token expiring soon or no expiry set, refreshing...');
                         await this.refreshLongLivedToken();
                     }
                     return;
@@ -144,6 +159,12 @@ class ThreadsService {
     async keywordSearch(keyword, options = {}) {
         await this._initPromise;
 
+        // If we already know the token is expired, don't waste API calls
+        if (this.tokenExpired) {
+            console.error(`[Threads API] Skipping search for "${keyword}" — token is expired`);
+            return [];
+        }
+
         const {
             search_type = 'RECENT',
             limit = 50,
@@ -167,20 +188,34 @@ class ThreadsService {
                 `${THREADS_API_BASE}/keyword_search?${params.toString()}`
             );
 
+            // If we get here, token is valid
+            this.tokenExpired = false;
+            this.tokenError = null;
+
             return response.data?.data || [];
         } catch (error) {
             const errData = error.response?.data;
             const status = error.response?.status;
+            const errorCode = errData?.error?.code;
+            const errorMessage = errData?.error?.message || error.message;
+
             console.error(`[Threads API] Keyword search error for "${keyword}":`);
             console.error(`  HTTP ${status}: ${JSON.stringify(errData || error.message)}`);
 
             // If token expired or invalid
-            if (status === 190 || status === 401 || errData?.error?.code === 190) {
+            if (status === 190 || status === 401 || errorCode === 190) {
                 console.error('[Threads API] ⚠️ Token appears expired. Attempting refresh...');
                 const refreshed = await this.refreshLongLivedToken();
                 if (refreshed) {
                     // Retry the request once
+                    this.tokenExpired = false;
+                    this.tokenError = null;
                     return this.keywordSearch(keyword, options);
+                } else {
+                    // Refresh failed — mark token as expired
+                    this.tokenExpired = true;
+                    this.tokenError = errorMessage;
+                    console.error('[Threads API] ❌ Token is expired and cannot be refreshed. Generate a new token at https://developers.facebook.com/apps/');
                 }
             }
             return [];

@@ -302,6 +302,19 @@ class ThreadsKeywordSearch extends EventEmitter {
         this.shouldStop = false; // Reset stop flag
         this.searchLog = []; // Reset log
 
+        // Check token status before starting
+        const tokenStatus = threadsAPI.getTokenStatus();
+        if (tokenStatus.expired) {
+            console.error('[Threads Search] ❌ Token is expired, cannot search');
+            this._emitLog({
+                type: 'error',
+                message: `❌ Threads токен истёк! Необходимо сгенерировать новый токен в Meta Developer Console. Ошибка: ${tokenStatus.error || 'Token expired'}`
+            });
+            this._emitLog({ type: 'end', message: '❌ Поиск невозможен — токен истёк' });
+            this.isSearching = false;
+            return;
+        }
+
         console.log(`\n[Threads Search] ========== Cycle ${cycleIndex + 1}/3 START ==========`);
 
         this._emitLog({
