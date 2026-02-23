@@ -116,9 +116,9 @@ async function processYouTubeComments(videoCount = 10) {
   }
 }
 
-// Schedule YouTube checks 3 times per day: 08:00, 14:00, 20:00
-schedule.scheduleJob('0 8 * * *', async () => {
-  console.log('[YouTube Schedule] Running comment check (08:00)');
+// Schedule YouTube checks 3 times per day: 10:00, 14:00, 20:00
+schedule.scheduleJob('0 10 * * *', async () => {
+  console.log('[YouTube Schedule] Running comment check (10:00)');
   await processYouTubeComments(0);
 });
 schedule.scheduleJob('0 14 * * *', async () => {
@@ -129,8 +129,7 @@ schedule.scheduleJob('0 20 * * *', async () => {
   console.log('[YouTube Schedule] Running comment check (20:00)');
   await processYouTubeComments(0);
 });
-// Also run once 30s after server start
-setTimeout(() => processYouTubeComments(0), 30000);
+// No auto-run on server start — first run at 10:00
 
 function tryParseJson(value) {
   if (typeof value !== 'string') return value;
@@ -415,7 +414,7 @@ app.get('/api/youtube/status', async (req, res) => {
     res.json({
       authorized: youtubeOAuth.isAuthorized(),
       channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
-      schedule: '3 раза в день: 08:00, 14:00, 20:00',
+      schedule: '3 раза в день: 10:00, 14:00, 20:00',
       stats: {
         ...youtubeHandler.getStats(),
         totalComments,
