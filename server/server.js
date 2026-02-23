@@ -134,13 +134,21 @@ async function processYouTubeComments(videoCount = 10) {
   }
 }
 
-// Schedule YouTube daily check at 10:00 AM
-schedule.scheduleJob('0 10 * * *', async () => {
-  console.log('[YouTube Schedule] Running daily comment check (10:00)');
-  await processYouTubeComments(10);
+// Schedule YouTube checks 3 times per day: 08:00, 14:00, 20:00
+schedule.scheduleJob('0 8 * * *', async () => {
+  console.log('[YouTube Schedule] Running comment check (08:00)');
+  await processYouTubeComments(20);
+});
+schedule.scheduleJob('0 14 * * *', async () => {
+  console.log('[YouTube Schedule] Running comment check (14:00)');
+  await processYouTubeComments(20);
+});
+schedule.scheduleJob('0 20 * * *', async () => {
+  console.log('[YouTube Schedule] Running comment check (20:00)');
+  await processYouTubeComments(20);
 });
 // Also run once 30s after server start
-setTimeout(() => processYouTubeComments(10), 30000);
+setTimeout(() => processYouTubeComments(20), 30000);
 
 function tryParseJson(value) {
   if (typeof value !== 'string') return value;
@@ -403,7 +411,7 @@ app.get('/api/youtube/status', async (req, res) => {
     res.json({
       authorized: youtubeOAuth.isAuthorized(),
       channelId: process.env.YOUTUBE_CHANNEL_ID || 'not set',
-      schedule: 'Ежедневно в 10:00',
+      schedule: '3 раза в день: 08:00, 14:00, 20:00',
       stats: {
         ...youtubeHandler.getStats(),
         totalComments: ytStats.totalComments,
@@ -667,14 +675,17 @@ app.post('/api/google/reviews/reply-single', async (req, res) => {
 app.get('/api/threads/status', async (req, res) => {
   try {
     const threadsDB = require('./services/threads-database');
+    const threadsAPI = require('./services/threads-api');
     const stats = await threadsDB.getStats();
     const chartData = await threadsDB.getChartData();
     const keywordsInfo = threadsKeywordSearch.getKeywordsInfo();
+    const tokenStatus = threadsAPI.getTokenStatus();
     res.json({
       enabled: true,
       schedule: ['08:00', '14:00', '20:00'],
       maxRepliesPerDay: 10,
       isSearching: threadsKeywordSearch.isSearching,
+      tokenStatus,
       stats,
       chartData,
       totalKeywords: keywordsInfo.totalMedicalKeywords + 1, // +1 for city

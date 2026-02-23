@@ -77,8 +77,9 @@ class YouTubeHandler {
                     continue;
                 }
 
-                // Check if should respond
-                if (!youtubeResponder.shouldRespond(comment)) {
+                // Check if should respond (new format: { respond, type, emojiReply })
+                const decision = youtubeResponder.shouldRespond(comment);
+                if (!decision.respond) {
                     const result = {
                         commentId: comment.commentId,
                         author: comment.authorDisplayName,
@@ -100,11 +101,19 @@ class YouTubeHandler {
                 }
 
                 try {
-                    // Generate AI response
-                    const responseText = await youtubeResponder.generateResponse(
-                        comment.textOriginal || comment.text,
-                        videoInfo
-                    );
+                    let responseText;
+
+                    if (decision.type === 'emoji') {
+                        // Emoji-only comment → reply with emoji (no AI)
+                        responseText = decision.emojiReply;
+                        console.log(`[YouTube Handler] Emoji reply to @${comment.authorDisplayName}: ${responseText}`);
+                    } else {
+                        // AI-generated response
+                        responseText = await youtubeResponder.generateResponse(
+                            comment.textOriginal || comment.text,
+                            videoInfo
+                        );
+                    }
 
                     // Post reply
                     console.log(`[YouTube Handler] Attempting to reply to @${comment.authorDisplayName}...`);

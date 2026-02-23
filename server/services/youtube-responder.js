@@ -97,28 +97,81 @@ ${treatments.join(', ')}
         }
     }
 
-    // Determine if comment needs a response
-    shouldRespond(comment) {
-        const text = comment.textOriginal?.toLowerCase() || comment.text?.toLowerCase() || '';
+    // Check if text is emoji-only (emojis, variation selectors, ZWJ, spaces)
+    isEmojiOnly(text) {
+        const stripped = text.replace(/[\s\uFE0F\u200D]/g, '');
+        // Match emoji sequences
+        const emojiRegex = /^[\p{Emoji_Presentation}\p{Emoji}\u200D\uFE0F\u20E3\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]+$/u;
+        return emojiRegex.test(stripped) && stripped.length > 0;
+    }
 
-        // Skip very short comments (likely emojis or single words)
-        if (text.length < 5) return false;
+    // Generate a quick emoji response (no AI needed)
+    getEmojiResponse() {
+        const responses = ['❤️', '🙏', '🙏❤️', '❤️🔥', '🤗', '💪🙏', '❤️🙏'];
+        return responses[Math.floor(Math.random() * responses.length)];
+    }
+
+    // Determine if comment needs a response and what type
+    // Returns: { respond: boolean, type: 'emoji' | 'ai' | null, emojiReply?: string }
+    shouldRespond(comment) {
+        const text = comment.textOriginal || comment.text || '';
+        const textLower = text.toLowerCase().trim();
+
+        // Skip empty
+        if (textLower.length === 0) return { respond: false, type: null };
 
         // Skip spam-like comments
         const spamPatterns = [
             'подписка', 'subscribe', 'check my channel', 'посмотри мой канал',
-            'http://', 'https://', 'www.', 'подпишись', 'лайк на лайк'
+            'http://', 'https://', 'www.', 'подпишись', 'лайк на лайк',
+            'check out', 'my channel', 'sub4sub', 'follow me'
         ];
-        if (spamPatterns.some(pattern => text.includes(pattern))) return false;
+        if (spamPatterns.some(pattern => textLower.includes(pattern))) {
+            return { respond: false, type: null };
+        }
 
-        // Prioritize questions and meaningful comments
-        const priorityPatterns = [
+        // Emoji-only comments → reply with emoji
+        if (this.isEmojiOnly(text)) {
+            return { respond: true, type: 'emoji', emojiReply: this.getEmojiResponse() };
+        }
+
+        // Very short non-emoji (1-2 chars like "ну", "да") → skip
+        if (textLower.length < 3) return { respond: false, type: null };
+
+        // Positive/grateful comments → AI reply
+        const positivePatterns = [
+            'спасибо', 'благодар', 'помогло', 'полезно', 'интересно', 'класс',
+            'круто', 'супер', 'молодец', 'лучший', 'лучшая', 'лучшие', 'браво',
+            'отлично', 'замечательно', 'прекрасно', 'здорово', 'топ', 'огонь',
+            'профессионал', 'рекомендую', 'хороший врач', 'хороший доктор',
+            'врач от бога', 'золотые руки', 'помог', 'помогла', 'вылечил',
+            'актуально', 'нужная тема', 'хорошая тема', 'полезная тема',
+            'грамотный', 'опытный', 'рахмет', 'жарайсың'
+        ];
+        if (positivePatterns.some(pattern => textLower.includes(pattern))) {
+            return { respond: true, type: 'ai' };
+        }
+
+        // Questions and inquiries → AI reply (high priority)
+        const questionPatterns = [
             '?', 'как', 'где', 'сколько', 'можно', 'принимаете', 'работаете',
             'записаться', 'консультация', 'цена', 'стоимость', 'адрес',
-            'спасибо', 'помогло', 'полезно', 'интересно'
+            'телефон', 'номер', 'когда', 'какой', 'какая', 'подскажите',
+            'помогите', 'посоветуйте', 'расскажите', 'объясните',
+            'болит', 'боль', 'проблема', 'диагноз', 'лечение', 'симптом',
+            'қалай', 'қайда', 'қанша'
         ];
+        if (questionPatterns.some(pattern => textLower.includes(pattern))) {
+            return { respond: true, type: 'ai' };
+        }
 
-        return priorityPatterns.some(pattern => text.includes(pattern)) || text.length > 20;
+        // Longer meaningful comments (>15 chars) → AI reply
+        if (textLower.length > 15) {
+            return { respond: true, type: 'ai' };
+        }
+
+        // Everything else → skip
+        return { respond: false, type: null };
     }
 }
 
