@@ -25,6 +25,10 @@ class CrossPostService {
         this.facebookPageId = process.env.FACEBOOK_PAGE_ID || '105221775099742';
         this.facebookPageToken = null; // Will be fetched from /me/accounts
 
+        // VK config
+        this.vkAccessToken = process.env.VK_ACCESS_TOKEN;
+        this.vkGroupId = process.env.VK_GROUP_ID; // Without minus sign, e.g. '233499872'
+
         // State
         this.isPolling = false;
         this.lastPollTime = null;
@@ -349,6 +353,258 @@ class CrossPostService {
     }
 
     // ==========================================
+    // Phase 3: VK Cross-Posting
+    // ==========================================
+
+    /**
+     * Upload a photo to VK servers (required before posting)
+     * VK requires uploading photos to their server first, then attaching to a wall post
+     */
+    async uploadPhotoToVK(imageUrl) {
+        try {
+            // Step 1: Get upload server URL
+            const uploadServerRes = await axios.get('https://api.vk.com/method/photos.getWallUploadServer', {
+                params: {
+                    group_id: this.vkGroupId,
+                    access_token: this.vkAccessToken,
+                    v: '5.199'
+                }
+            });
+
+            if (uploadServerRes.data.error) {
+                throw new Error(uploadServerRes.data.error.error_msg);
+            }
+
+            const uploadUrl = uploadServerRes.data.response.upload_url;
+
+            // Step 2: Download image from Instagram
+            const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            const imageBuffer = Buffer.from(imageResponse.data);
+
+            // Step 3: Upload to VK using multipart/form-data
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('photo', imageBuffer, { filename: 'photo.jpg', contentType: 'image/jpeg' });
+
+            const uploadRes = await axios.post(uploadUrl, formData, {
+                headers: formData.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
+            });
+
+            // Step 4: Save uploaded photo on VK
+            const saveRes = await axios.get('https://api.vk.com/method/photos.saveWallPhoto', {
+                params: {
+                    group_id: this.vkGroupId,
+                    photo: uploadRes.data.photo,
+                    server: uploadRes.data.server,
+                    hash: uploadRes.data.hash,
+                    access_token: this.vkAccessToken,
+                    v: '5.199'
+                }
+            });
+
+            if (saveRes.data.error) {
+                throw new Error(saveRes.data.error.error_msg);
+            }
+
+            const savedPhoto = saveRes.data.response[0];
+            return `photo${savedPhoto.owner_id}_${savedPhoto.id}`;
+        } catch (error) {
+            console.error('[CrossPost → VK] Photo upload error:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Upload a video to VK servers using video.save API
+     * VK requires: 1) call video.save to get upload URL, 2) POST video file to that URL
+     */
+    async uploadVideoToVK(videoUrl, caption = '') {
+        try {
+            // Step 1: Call video.save to get upload URL
+            const saveRes = await axios.get('https://api.vk.com/method/video.save', {
+                params: {
+                    group_id: this.vkGroupId,
+                    name: (caption || 'Video').substring(0, 128),
+                    description: caption || '',
+                    wallpost: 0,  // We'll attach to wall.post manually
+                    is_private: 0,
+                    access_token: this.vkAccessToken,
+                    v: '5.199'
+                }
+            });
+
+            if (saveRes.data.error) {
+                throw new Error(saveRes.data.error.error_msg);
+            }
+
+            const { upload_url, owner_id, video_id } = saveRes.data.response;
+            console.log(`[CrossPost → VK] Video slot created: video${owner_id}_${video_id}`);
+
+            // Step 2: Download video from Instagram
+            console.log(`[CrossPost → VK] Downloading video...`);
+            const videoResponse = await axios.get(videoUrl, {
+                responseType: 'arraybuffer',
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 120000  // 2 min timeout for large videos
+            });
+            const videoBuffer = Buffer.from(videoResponse.data);
+            const sizeMB = (videoBuffer.length / 1024 / 1024).toFixed(1);
+            console.log(`[CrossPost → VK] Downloaded ${sizeMB} MB, uploading to VK...`);
+
+            // Step 3: Upload video file to VK
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('video_file', videoBuffer, {
+                filename: 'video.mp4',
+                contentType: 'video/mp4'
+            });
+
+            await axios.post(upload_url, formData, {
+                headers: formData.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 180000  // 3 min timeout for upload
+            });
+
+            console.log(`[CrossPost → VK] Video uploaded successfully`);
+            return `video${owner_id}_${video_id}`;
+        } catch (error) {
+            console.error('[CrossPost → VK] Video upload error:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Post to VK community wall
+     */
+    async postToVK(caption, attachments = '') {
+        try {
+            const response = await axios.get('https://api.vk.com/method/wall.post', {
+                params: {
+                    owner_id: `-${this.vkGroupId}`,
+                    from_group: 1,
+                    message: caption || '',
+                    attachments: attachments,
+                    access_token: this.vkAccessToken,
+                    v: '5.199'
+                }
+            });
+
+            if (response.data.error) {
+                throw new Error(response.data.error.error_msg);
+            }
+
+            const postId = response.data.response.post_id;
+            console.log(`[CrossPost → VK] Posted: ${postId}`);
+            return { success: true, postId: String(postId) };
+        } catch (error) {
+            console.error('[CrossPost → VK] Post error:', error.response?.data || error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Cross-post a single queue item to VK
+     */
+    async crossPostToVK(queueItem) {
+        if (!this.vkAccessToken || !this.vkGroupId) {
+            console.log('[CrossPost → VK] No VK credentials configured, skipping');
+            await this.supabase
+                .from('crosspost_queue')
+                .update({ vk_status: 'skipped' })
+                .eq('id', queueItem.id);
+            return { success: false, error: 'No VK credentials' };
+        }
+
+        let result;
+
+        try {
+            const caption = queueItem.caption || '';
+
+            switch (queueItem.media_type) {
+                case 'IMAGE': {
+                    const photoAttachment = await this.uploadPhotoToVK(queueItem.media_urls[0]?.url);
+                    if (photoAttachment) {
+                        result = await this.postToVK(caption, photoAttachment);
+                    } else {
+                        // Fallback: post text only
+                        result = await this.postToVK(caption);
+                    }
+                    break;
+                }
+
+                case 'CAROUSEL_ALBUM': {
+                    // Upload all images (max 10 per VK post)
+                    const attachments = [];
+                    const items = queueItem.media_urls.slice(0, 10);
+                    for (const item of items) {
+                        if (item.type === 'IMAGE' && item.url) {
+                            const att = await this.uploadPhotoToVK(item.url);
+                            if (att) attachments.push(att);
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+                    result = await this.postToVK(caption, attachments.join(','));
+                    break;
+                }
+
+                case 'VIDEO':
+                case 'REELS': {
+                    // Try to upload actual video to VK
+                    const videoUrl = queueItem.media_urls[0]?.url;
+                    if (videoUrl) {
+                        const videoAttachment = await this.uploadVideoToVK(videoUrl, caption);
+                        if (videoAttachment) {
+                            result = await this.postToVK(caption, videoAttachment);
+                        } else {
+                            // Fallback: post text with link to Instagram
+                            const textWithLink = `${caption}\n\n📹 Видео: ${queueItem.permalink || ''}`;
+                            result = await this.postToVK(textWithLink);
+                        }
+                    } else {
+                        const textWithLink = `${caption}\n\n📹 Видео: ${queueItem.permalink || ''}`;
+                        result = await this.postToVK(textWithLink);
+                    }
+                    break;
+                }
+
+                default:
+                    result = { success: false, error: `Unknown media type: ${queueItem.media_type}` };
+            }
+        } catch (error) {
+            result = { success: false, error: error.message };
+        }
+
+        // Update queue status
+        const updateData = {
+            vk_status: result.success ? 'posted' : 'failed',
+            vk_post_id: result.postId || null,
+            updated_at: new Date().toISOString()
+        };
+
+        if (!result.success) {
+            updateData.error_log = {
+                ...queueItem.error_log,
+                vk: { error: result.error, timestamp: new Date().toISOString() }
+            };
+        }
+
+        await this.supabase
+            .from('crosspost_queue')
+            .update(updateData)
+            .eq('id', queueItem.id);
+
+        if (result.success) {
+            this.stats.crossPosted.vk++;
+        }
+
+        return result;
+    }
+
+    // ==========================================
     // Main Orchestration
     // ==========================================
 
@@ -381,13 +637,22 @@ class CrossPostService {
             // Step 3: Save new posts to queue
             const savedPosts = await this.saveToQueue(newPosts);
 
-            // Step 4: Cross-post to Facebook
+            // Step 4: Cross-post to Facebook + VK
             const fbResults = [];
+            const vkResults = [];
             for (const post of savedPosts) {
+                // Facebook
                 const fbResult = await this.crossPostToFacebook(post);
                 fbResults.push({
                     instagramId: post.instagram_post_id,
                     facebook: fbResult
+                });
+
+                // VK
+                const vkResult = await this.crossPostToVK(post);
+                vkResults.push({
+                    instagramId: post.instagram_post_id,
+                    vk: vkResult
                 });
 
                 // Small delay between posts to avoid rate limiting
@@ -399,13 +664,14 @@ class CrossPostService {
             const summary = {
                 newPosts: newPosts.length,
                 crossPosted: {
-                    facebook: fbResults.filter(r => r.facebook.success).length
+                    facebook: fbResults.filter(r => r.facebook.success).length,
+                    vk: vkResults.filter(r => r.vk.success).length
                 },
-                errors: fbResults.filter(r => !r.facebook.success).length,
-                details: fbResults
+                errors: fbResults.filter(r => !r.facebook.success).length + vkResults.filter(r => !r.vk.success).length,
+                details: { facebook: fbResults, vk: vkResults }
             };
 
-            console.log(`[CrossPost] ✅ Cycle complete: ${summary.newPosts} new, ${summary.crossPosted.facebook} to Facebook`);
+            console.log(`[CrossPost] ✅ Cycle complete: ${summary.newPosts} new, ${summary.crossPosted.facebook} to Facebook, ${summary.crossPosted.vk} to VK`);
             return summary;
 
         } catch (error) {
@@ -418,15 +684,22 @@ class CrossPostService {
     }
 
     /**
-     * Retry failed cross-posts
+     * Retry failed cross-posts AND posts stuck in 'pending' for over 10 minutes.
+     * This fixes the case where posts were added to the queue but never processed
+     * (e.g., VK credentials were added after the post was queued).
      */
     async retryFailed() {
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+        // Get posts that explicitly failed OR have been pending for too long (stuck)
         const { data: failed } = await this.supabase
             .from('crosspost_queue')
             .select('*')
-            .eq('facebook_status', 'failed')
+            .or(
+                `facebook_status.eq.failed,vk_status.eq.failed,and(vk_status.eq.pending,created_at.lt.${tenMinutesAgo}),and(facebook_status.eq.pending,created_at.lt.${tenMinutesAgo})`
+            )
             .order('created_at', { ascending: false })
-            .limit(5);
+            .limit(10);
 
         if (!failed || failed.length === 0) {
             console.log('[CrossPost] No failed posts to retry');
@@ -434,11 +707,17 @@ class CrossPostService {
         }
 
         console.log(`[CrossPost] Retrying ${failed.length} failed posts...`);
-        let retried = 0;
+        let retried = { facebook: 0, vk: 0 };
 
         for (const item of failed) {
-            const result = await this.crossPostToFacebook(item);
-            if (result.success) retried++;
+            if (item.facebook_status === 'failed' || item.facebook_status === 'pending') {
+                const fbResult = await this.crossPostToFacebook(item);
+                if (fbResult.success) retried.facebook++;
+            }
+            if (item.vk_status === 'failed' || item.vk_status === 'pending') {
+                const vkResult = await this.crossPostToVK(item);
+                if (vkResult.success) retried.vk++;
+            }
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
