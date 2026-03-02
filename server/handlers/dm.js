@@ -11,9 +11,44 @@ const openai = new OpenAI({
 const CLINIC_PHONE = process.env.CLINIC_PHONE || '87470953952';
 
 /**
+ * Check if phone number was already mentioned in conversation history
+ */
+function wasPhoneMentioned(history) {
+    for (const msg of history) {
+        if (msg.role === 'assistant' && msg.text && msg.text.includes(CLINIC_PHONE)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * OpenAI tool definition: AI can call this to end the conversation
+ */
+const AI_TOOLS = [
+    {
+        type: 'function',
+        function: {
+            name: 'end_conversation',
+            description: 'Вызови эту функцию когда диалог подошёл к логическому завершению: клиент попрощался, поблагодарил, или больше не задаёт вопросов. После вызова бот перестанет отвечать этому клиенту. НЕ вызывай в середине разговора — только когда диалог реально закончен.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    reason: {
+                        type: 'string',
+                        description: 'Краткая причина завершения (например: "клиент попрощался", "клиент поблагодарил")'
+                    }
+                },
+                required: ['reason']
+            }
+        }
+    }
+];
+
+/**
  * Build system prompt with clinic knowledge base
  */
-function buildSystemPrompt() {
+function buildSystemPrompt(phoneAlreadyMentioned) {
     const doctors = clinicData.doctors.slice(0, 12).map(d =>
         `- ${d.name}: ${d.specialization.join(', ')} (${d.experience})`
     ).join('\n');
@@ -25,14 +60,24 @@ function buildSystemPrompt() {
     const services = clinicData.services.consultations.join(', ');
     const diagnostics = clinicData.services.diagnostics.join(', ');
 
-    return `Ты — ассистент медицинской клиники INFINITY LIFE в Астане. Отвечаешь на сообщения в Instagram Direct.
+    const phoneInstruction = phoneAlreadyMentioned
+        ? `НОМЕР ТЕЛЕФОНА УЖЕ БЫЛ ОЗВУЧЕН РАНЕЕ В ЭТОМ ДИАЛОГЕ. НЕ ПОВТОРЯЙ ЕГО. Если нужно сослаться — скажи "по номеру, который я отправила выше" или "по тому же номеру".`
+        : `Номер для записи: ${CLINIC_PHONE}. Можешь упомянуть его ОДИН раз, если это уместно. После этого больше не повторяй.`;
+
+    return `Ты — администратор медицинской клиники INFINITY LIFE в Астане. Отвечаешь на сообщения клиентов в Instagram Direct. Ты живой человек, а не бот.
+
+## ТВОЙ СТИЛЬ ОБЩЕНИЯ
+- Пиши как реальный человек: тепло, коротко, по делу
+- НЕ используй клише: "Мне очень жаль слышать", "Ваши переживания важны", "Спасибо за обращение", "Не стесняйтесь обращаться"
+- НЕ используй канцеляризмы и официоз. Пиши просто и по-человечески
+- 1-3 предложения максимум. Не растягивай
+- Без markdown, без звёздочек, без эмодзи — это Instagram
+- Отвечай на русском
 
 ## О КЛИНИКЕ
-- Название: ${clinicData.clinic.fullName}
-- Телефон: ${clinicData.clinic.contactPhone}
+- ${clinicData.clinic.fullName}
 - Сайт: ${clinicData.clinic.website}
-- Врачей: ${clinicData.clinic.stats.specialists}
-- Опыт: ${clinicData.clinic.stats.yearsExperience} лет
+- ${clinicData.clinic.stats.specialists} врачей, ${clinicData.clinic.stats.yearsExperience} лет опыта
 
 ## ФИЛИАЛЫ
 ${branches}
@@ -40,30 +85,37 @@ ${branches}
 ## ВРАЧИ (основные)
 ${doctors}
 
-## КОНСУЛЬТАЦИИ
-${services}
+## УСЛУГИ
+Консультации: ${services}
+Диагностика (МРТ, КТ, рентген, УЗИ — всё есть!): ${diagnostics}
 
-## ДИАГНОСТИКА (ЕСТЬ В КЛИНИКЕ!)
-${diagnostics}
+## ТЕЛЕФОН
+${phoneInstruction}
 
-## ПРАВИЛА
-1. Отвечай вежливо и кратко (2-3 предложения)
-2. Помни контекст предыдущих сообщений
-3. ЛЮБЫЕ ДЕЙСТВИЯ (запись, цены, выбор врача) → номер ${CLINIC_PHONE}
-4. Не ставь диагнозы
-5. Отвечай на русском
-6. Без markdown (это Instagram)
-7. Если спрашивают про МРТ, КТ, рентген, УЗИ — ДА, У НАС ЕСТЬ!
+## ЗАВЕРШЕНИЕ РАЗГОВОРА
+У тебя есть функция end_conversation. Вызови её когда разговор подошёл к концу — клиент попрощался, поблагодарил, сказал "до свидания", или просто подтвердил без нового вопроса. При этом всё равно отправь короткий прощальный ответ (1 предложение). Не затягивай прощание, не благодари в ответ бесконечно.
+НЕ вызывай end_conversation если клиент говорит "ок" или "спасибо" но продолжает задавать вопросы или описывать проблему.
 
-## ПРИМЕРЫ
-User: "Болит спина"
-→ "Здравствуйте! Боли в спине могут лечить наши мануальные терапевты и неврологи. Для записи на консультацию позвоните ${CLINIC_PHONE}."
+## ЖАЛОБЫ И НЕГАТИВ
+Если клиент жалуется на врача, описывает негативный опыт лечения или травму:
+- НЕ ЗАЩИЩАЙ врача. НЕ называй его "высококвалифицированным специалистом"
+- НЕ предлагай записаться к вам на консультацию
+- Прими проблему всерьёз и с сочувствием (но без шаблонных фраз)
+- Предложи связать с руководством клиники для разбора ситуации
+- Пример: "Это очень серьёзно, я передам вашу информацию руководству. Если хотите, могу дать прямой контакт главного врача для личного разговора."
 
-User: "Где находитесь?"
-→ "У нас 2 филиала: пр. Кабанбай батыра 40 и ул. Жанайдар Жирентаев 4. Работаем с 08:00 до 21:00. Записаться: ${CLINIC_PHONE}"
+## ПРИМЕРЫ ХОРОШЕГО ТОНА
+Клиент: "Болит спина уже неделю"
+→ "Это может быть связано с позвоночником. У нас есть неврологи и мануальные терапевты — запишитесь по ${CLINIC_PHONE}, подберём специалиста."
 
-User: "Есть ли МРТ?"
-→ "Да, у нас есть МРТ! Для записи на диагностику позвоните ${CLINIC_PHONE}."`;
+Клиент: "Где вы находитесь?"
+→ "У нас два филиала: Кабанбай батыра 40 и Жанайдар Жирентаев 4. Работаем с 8 до 21."
+
+Клиент: "Есть МРТ?"
+→ "Да, МРТ есть. Звоните ${CLINIC_PHONE}, вам подскажут ближайшее свободное время."
+
+Клиент: "Сколько стоит приём?"
+→ "Зависит от специалиста. Позвоните ${CLINIC_PHONE}, вам всё подробно расскажут."`;
 }
 
 /**
@@ -74,9 +126,12 @@ async function generateDMResponse(userId, newMessages) {
         // Get conversation history (now async)
         const history = await userManager.getConversation(userId, 10);
 
+        // Check if phone was already mentioned in prior messages
+        const phoneAlreadyMentioned = wasPhoneMentioned(history);
+
         // Build messages array for OpenAI
         const messages = [
-            { role: 'system', content: buildSystemPrompt() }
+            { role: 'system', content: buildSystemPrompt(phoneAlreadyMentioned) }
         ];
 
         // Add conversation history
@@ -98,19 +153,36 @@ async function generateDMResponse(userId, newMessages) {
             model: 'gpt-4o-mini',
             messages,
             max_tokens: 250,
-            temperature: 0.7
+            temperature: 0.7,
+            tools: AI_TOOLS,
+            tool_choice: 'auto'
         });
 
-        const reply = response.choices[0]?.message?.content?.trim();
+        const choice = response.choices[0];
+        const reply = choice?.message?.content?.trim() || '';
+
+        // Check if AI decided to end conversation via function call
+        const toolCalls = choice?.message?.tool_calls || [];
+        const endCall = toolCalls.find(tc => tc.function?.name === 'end_conversation');
 
         // Save assistant reply to memory
-        await userManager.addMessage(userId, 'assistant', reply);
+        if (reply) {
+            await userManager.addMessage(userId, 'assistant', reply);
+        }
 
-        return reply;
+        // If AI called end_conversation — disable DM AI for this user
+        if (endCall) {
+            let reason = 'unknown';
+            try { reason = JSON.parse(endCall.function.arguments).reason; } catch (e) { }
+            await userManager.updateUser(userId, { dm_enabled: false });
+            console.log(`[DM] AI self-disabled for ${userId} — reason: ${reason}`);
+        }
+
+        return reply || 'Всего доброго!';
 
     } catch (error) {
         console.error('[DM AI Error]', error.message);
-        return `Здравствуйте! Спасибо за обращение в клинику INFINITY LIFE. Для записи и консультации позвоните ${CLINIC_PHONE}.`;
+        return `Здравствуйте! Для записи и консультации позвоните ${CLINIC_PHONE}.`;
     }
 }
 
