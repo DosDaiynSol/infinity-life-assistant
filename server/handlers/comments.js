@@ -21,7 +21,7 @@ const REJECTION_REASONS = {
     LLM_NO: { code: 'llm_no', label: 'LLM: нерелевантно', icon: '🤖' }
 };
 
-// Template response for relevant comments
+// Fallback template response (used if AI fails)
 const TEMPLATE_RESPONSE = (username) => {
     const hour = new Date().getHours();
     let greeting = 'Добрый день';
@@ -29,6 +29,15 @@ const TEMPLATE_RESPONSE = (username) => {
     else if (hour >= 18 || hour < 5) greeting = 'Добрый вечер';
 
     return `@${username} ${greeting}. Приглашаем вас на осмотр и консультацию. Записаться можно по номеру ${CLINIC_PHONE}`;
+};
+
+const TEMPLATE_RESPONSE_KZ = (username) => {
+    const hour = new Date().getHours();
+    let greeting = 'Қайырлы күн';
+    if (hour >= 5 && hour < 12) greeting = 'Қайырлы таң';
+    else if (hour >= 18 || hour < 5) greeting = 'Қайырлы кеш';
+
+    return `@${username} ${greeting}. Сізді тексеру мен кеңеске шақырамыз. Жазылу үшін: ${CLINIC_PHONE}`;
 };
 
 /**
@@ -77,6 +86,7 @@ async function llmEvaluate(text) {
 - Упоминание медицинских проблем
 - Вопросы о записи, ценах, услугах
 - Комплименты с вопросом ("круто, а как записаться?")
+- Вопросы на казахском языке о здоровье/клинике
 
 НЕ РЕЛЕВАНТНО (NO):
 - Просто теги друзей
@@ -100,9 +110,75 @@ async function llmEvaluate(text) {
 
     } catch (error) {
         console.error('[LLM Error]', error.message);
-        // Fallback: check for medical keywords
-        const medicalKeywords = ['болит', 'боль', 'спина', 'сустав', 'грыжа', 'лечение', 'врач', 'запись', 'цена', 'сколько', 'помогите', 'записаться'];
+        // Fallback: check for medical keywords (Russian + Kazakh)
+        const medicalKeywords = [
+            'болит', 'боль', 'спина', 'сустав', 'грыжа', 'лечение', 'врач', 'запись', 'цена', 'сколько', 'помогите', 'записаться',
+            'ауырады', 'ауру', 'жазылу', 'баға', 'қанша', 'дәрігер', 'емдеу', 'қалай'
+        ];
         return medicalKeywords.some(kw => text.toLowerCase().includes(kw));
+    }
+}
+
+/**
+ * Detect if text is primarily Kazakh
+ */
+function isKazakh(text) {
+    // Kazakh-specific characters and common words
+    const kazakhChars = /[әіңғүұқөһ]/i;
+    const kazakhWords = /\b(қалай|қанша|баға|жазылу|болады|керек|бар|жоқ|және|мен|сіз|біз|ол|бұл|осы|сол|айт|қой|деп|үшін|туралы|маған|саған|оған|бізге)\b/i;
+    return kazakhChars.test(text) || kazakhWords.test(text);
+}
+
+/**
+ * Generate smart AI response to the comment
+ */
+async function generateAIResponse(username, commentText, isKz) {
+    const hour = new Date().getHours();
+    let greetingRu = 'Добрый день';
+    if (hour >= 5 && hour < 12) greetingRu = 'Доброе утро';
+    else if (hour >= 18 || hour < 5) greetingRu = 'Добрый вечер';
+
+    let greetingKz = 'Қайырлы күн';
+    if (hour >= 5 && hour < 12) greetingKz = 'Қайырлы таң';
+    else if (hour >= 18 || hour < 5) greetingKz = 'Қайырлы кеш';
+
+    const systemPrompt = isKz ? `Сен INFINITY LIFE клиникасының Instagram-ындағы Assistant-сын. Клиника: неврология, остеопатия, мануальная терапия, травматология, гинекология. Телефон: ${CLINIC_PHONE}.
+
+МАҢЫЗДЫ ЕРЕЖЕЛЕР:
+- Әрқашан @${username} деп бастай, содан кейін "${greetingKz}" деп амандас
+- Комментарийге нақты жауап бер - қайталанбасын
+- Бағасы туралы сұраса: "Кеңес беру 5000₸-дан бастап" де
+- Жазылу туралы сұраса: телефонды бер
+- Белгілі бір ауруды немесе симптомды айтса — оған сәйкес мамандықты ұсын
+- Жауапты қысқа ұста (2-3 сөйлем макс), тек қажет болса телефонды айт
+- Тілі: ТЕК ҚАЗАҚ тілінде жауап бер
+- Instagram-ға арналған: хэштег жок, формальды емес` : `Ты ассистент клиники INFINITY LIFE в Instagram. Клиника: неврология, остеопатия, мануальная терапия, травматология, гинекология. Телефон: ${CLINIC_PHONE}.
+
+ВАЖНЫЕ ПРАВИЛА:
+- Всегда начинай с @${username}, затем "${greetingRu}"
+- Отвечай на конкретный вопрос — НЕ повторяй один шаблон
+- Если спрашивают о цене: "Консультация от 5000₸"
+- Если спрашивают о записи: дай телефон
+- Если упомянута конкретная боль/симптом — предложи подходящего специалиста
+- Ответ короткий (2-3 предложения макс), телефон давай только если уместно
+- Стиль: дружелюбный, живой, НЕ как робот
+- Для Instagram: без хэштегов, неформально`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Комментарий пользователя: "${commentText}"` }
+            ],
+            max_tokens: 100,
+            temperature: 0.7
+        });
+
+        return response.choices[0]?.message?.content?.trim() || null;
+    } catch (error) {
+        console.error('[AI Response Error]', error.message);
+        return null;
     }
 }
 
@@ -178,8 +254,20 @@ async function handleCommentBatch(comments) {
                 continue;
             }
 
-            // Generate and send response
-            const responseText = TEMPLATE_RESPONSE(comment.username || 'user');
+            // Detect language
+            const kz = isKazakh(comment.text);
+
+            // Generate smart AI response
+            let responseText = await generateAIResponse(comment.username || 'user', comment.text, kz);
+
+            // Fallback to template if AI failed
+            if (!responseText) {
+                responseText = kz
+                    ? TEMPLATE_RESPONSE_KZ(comment.username || 'user')
+                    : TEMPLATE_RESPONSE(comment.username || 'user');
+                console.log(`[Comment] AI failed, using template for @${comment.username}`);
+            }
+
             const sent = await instagramApi.replyToComment(comment.commentId, responseText);
 
             const result = {
@@ -196,7 +284,7 @@ async function handleCommentBatch(comments) {
             results.push(result);
             await instagramDB.addHistory(result);
 
-            console.log(`[Comment Reply] To @${comment.username}: ${responseText}`);
+            console.log(`[Comment Reply] To @${comment.username} [${kz ? 'KZ' : 'RU'}]: ${responseText}`);
 
         } catch (error) {
             console.error(`[Comment Error] ${comment.commentId}:`, error.message);
