@@ -176,3 +176,40 @@ test('escalates risky DM conversations without calling the normal generator', as
 
     assistant.shutdown();
 });
+
+test('instagram summary passes only instagram incidents into integration status', async () => {
+    const captured = [];
+    const { assistant, incidentManager } = createAssistant({
+        authManager: {
+            getInstagramMessagingAuth: () => ({ status: 'healthy', accessToken: 'dm-token' }),
+            getInstagramCommentAuth: () => ({ status: 'healthy', accessToken: 'reply-token' }),
+            getInstagramIntegrationSnapshot: (_metrics, incidents) => {
+                captured.push(...incidents);
+                return { status: 'healthy' };
+            }
+        }
+    });
+
+    await incidentManager.openIncident({
+        service: 'google_reviews',
+        severity: 'critical',
+        reasonCode: 'sla_breach',
+        title: 'Google SLA',
+        detail: 'Google review overdue'
+    });
+
+    await incidentManager.openIncident({
+        service: 'instagram_meta',
+        severity: 'critical',
+        reasonCode: 'delivery_failed',
+        title: 'Instagram delivery',
+        detail: 'Instagram delivery failed'
+    });
+
+    await assistant.getInstagramSummary();
+
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].service, 'instagram_meta');
+
+    assistant.shutdown();
+});

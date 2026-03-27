@@ -117,9 +117,13 @@ class IncidentManager {
     async listIncidents(options = {}) {
         const incidents = await this.store.read();
         const state = options.state || 'all';
-        const filtered = state === 'all'
+        const byState = state === 'all'
             ? incidents
             : incidents.filter((incident) => incident.state === state);
+        const service = options.service || null;
+        const filtered = service
+            ? byState.filter((incident) => incident.service === service)
+            : byState;
 
         return filtered.slice(0, options.limit || 50);
     }

@@ -1,11 +1,12 @@
 const DEFAULT_PAGE_ID = '17841448174425966';
+const { normalizeOptionalEnv } = require('./env-utils');
 
 class IntegrationAuthManager {
     getMetaConfig() {
         return {
-            pageId: process.env.INSTAGRAM_PAGE_ID || DEFAULT_PAGE_ID,
-            dmToken: process.env.INSTAGRAM_DM_TOKEN || null,
-            replyToken: process.env.INSTAGRAM_REPLY_TOKEN || null
+            pageId: normalizeOptionalEnv(process.env.INSTAGRAM_PAGE_ID) || DEFAULT_PAGE_ID,
+            dmToken: normalizeOptionalEnv(process.env.INSTAGRAM_DM_TOKEN),
+            replyToken: normalizeOptionalEnv(process.env.INSTAGRAM_REPLY_TOKEN)
         };
     }
 
@@ -16,7 +17,7 @@ class IntegrationAuthManager {
             accessToken: config.dmToken,
             status: config.dmToken ? 'healthy' : 'reauth_required',
             lastCheckedAt: new Date().toISOString(),
-            lastError: config.dmToken ? null : 'Instagram DM token is missing.'
+            lastError: config.dmToken ? null : 'Отсутствует токен для Instagram DM.'
         };
     }
 
@@ -27,7 +28,7 @@ class IntegrationAuthManager {
             accessToken: config.replyToken,
             status: config.replyToken ? 'healthy' : 'reauth_required',
             lastCheckedAt: new Date().toISOString(),
-            lastError: config.replyToken ? null : 'Instagram comment reply token is missing.'
+            lastError: config.replyToken ? null : 'Отсутствует токен для ответов на комментарии Instagram.'
         };
     }
 
@@ -39,22 +40,22 @@ class IntegrationAuthManager {
         const criticalIncidents = openIncidents.filter((incident) => incident.severity === 'critical').length;
 
         let status = 'healthy';
-        let summary = `Real-time replies active. Delivered: ${runtimeMetrics.delivered || 0}`;
+        let summary = `Ответы Instagram работают. Доставлено: ${runtimeMetrics.delivered || 0}`;
         let lastError = null;
 
         if (authMissing) {
             status = 'reauth_required';
             lastError = messaging.lastError || comments.lastError;
-            summary = 'Meta tokens need to be reauthorized before live replies can continue.';
+            summary = 'Нужна повторная авторизация Meta, иначе ответы в Instagram не будут отправляться.';
         } else if (deliveryFailures > 0 || criticalIncidents > 0) {
             status = 'degraded';
             lastError = openIncidents[0]?.detail || null;
-            summary = `Delivery issues: ${deliveryFailures}. Open incidents: ${openIncidents.length}.`;
+            summary = `Есть проблемы с доставкой: ${deliveryFailures}. Открытых инцидентов: ${openIncidents.length}.`;
         }
 
         return {
             id: 'instagram_meta',
-            name: 'Instagram / Meta',
+            name: 'Instagram',
             provider: 'Meta',
             status,
             summary,

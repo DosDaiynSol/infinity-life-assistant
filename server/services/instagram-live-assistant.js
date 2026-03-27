@@ -857,7 +857,11 @@ class InstagramLiveAssistant {
     }
 
     async listIncidents(limit = 30) {
-        return this.incidentManager.listIncidents({ state: 'open', limit });
+        return this.incidentManager.listIncidents({
+            state: 'open',
+            limit,
+            service: 'instagram_meta'
+        });
     }
 
     async getInstagramSummary() {

@@ -3,9 +3,11 @@
  * Handles sending messages and replying to comments
  */
 
-const INSTAGRAM_PAGE_ID = process.env.INSTAGRAM_PAGE_ID || '17841448174425966';
-const DM_TOKEN = process.env.INSTAGRAM_DM_TOKEN;
-const REPLY_TOKEN = process.env.INSTAGRAM_REPLY_TOKEN;
+const { normalizeOptionalEnv } = require('./env-utils');
+
+const INSTAGRAM_PAGE_ID = normalizeOptionalEnv(process.env.INSTAGRAM_PAGE_ID) || '17841448174425966';
+const DM_TOKEN = normalizeOptionalEnv(process.env.INSTAGRAM_DM_TOKEN);
+const REPLY_TOKEN = normalizeOptionalEnv(process.env.INSTAGRAM_REPLY_TOKEN);
 
 /**
  * Send Direct Message via Instagram Graph API

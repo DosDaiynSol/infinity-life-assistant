@@ -16,6 +16,7 @@ const {
   buildServiceCards,
   buildServicesPayload
 } = require('./services/command-center-payloads');
+const { normalizeOptionalEnv } = require('./services/env-utils');
 
 // YouTube services
 const youtubeOAuth = require('./services/youtube-oauth');
@@ -466,7 +467,13 @@ async function loadInstagramOperationalData() {
   return {
     id: 'instagram',
     name: 'Instagram',
-    authorized: Boolean(process.env.INSTAGRAM_PAGE_ID && (process.env.INSTAGRAM_DM_TOKEN || process.env.INSTAGRAM_REPLY_TOKEN)),
+    authorized: Boolean(
+      normalizeOptionalEnv(process.env.INSTAGRAM_PAGE_ID)
+      && (
+        normalizeOptionalEnv(process.env.INSTAGRAM_DM_TOKEN)
+        || normalizeOptionalEnv(process.env.INSTAGRAM_REPLY_TOKEN)
+      )
+    ),
     stats,
     history: history.slice(0, 20),
     users: users.slice(0, 8),
