@@ -20,6 +20,8 @@ const googleReviewsHandler = require('./handlers/google-reviews');
 
 // Threads Keyword Search services
 const threadsKeywordSearch = require('./services/threads-keyword-search');
+const threadsAPI = require('./services/threads-api');
+const threadsDB = require('./services/threads-database');
 const crossPostService = require('./services/crosspost-service');
 const schedule = require('node-schedule');
 
@@ -138,6 +140,1009 @@ function tryParseJson(value) {
   } catch (error) {
     return value;
   }
+}
+
+function getSeverityWeight(severity) {
+  if (severity === 'critical') return 0;
+  if (severity === 'warning') return 1;
+  return 2;
+}
+
+function getStatusWeight(status) {
+  if (status === 'reauth_required') return 0;
+  if (status === 'degraded') return 1;
+  return 2;
+}
+
+function parseStarRating(starRating) {
+  const ratingMap = {
+    ONE: 1,
+    TWO: 2,
+    THREE: 3,
+    FOUR: 4,
+    FIVE: 5
+  };
+
+  return ratingMap[starRating] || 0;
+}
+
+function truncateText(value, maxLength = 140) {
+  if (!value) return '';
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
+function getOperationalStatusLabel(status) {
+  const statusMap = {
+    pending: 'ожидает',
+    validated: 'проверено',
+    replied: 'с ответом',
+    sent: 'отправлено',
+    processed: 'обработано',
+    failed: 'ошибка',
+    skipped: 'пропущено',
+    posted: 'опубликовано'
+  };
+
+  return statusMap[status] || status;
+}
+
+function createIncident({
+  id,
+  severity,
+  source,
+  title,
+  detail,
+  actionLabel = null,
+  actionType = null,
+  actionPlatform = null,
+  actionName = null,
+  actionService = null,
+  actionUrl = null
+}) {
+  return {
+    id,
+    severity,
+    source,
+    title,
+    detail,
+    actionLabel,
+    actionType,
+    actionPlatform,
+    actionName,
+    actionService,
+    actionUrl
+  };
+}
+
+function createQueueItem({
+  id,
+  source,
+  queue,
+  title,
+  body,
+  status = 'pending',
+  priority = 'normal',
+  createdAt = null,
+  meta = null,
+  link = null
+}) {
+  return {
+    id,
+    source,
+    queue,
+    title,
+    body,
+    status,
+    priority,
+    createdAt,
+    meta,
+    link
+  };
+}
+
+function getServiceReauthConfig(service) {
+  const configs = {
+    youtube: {
+      status: 'ok',
+      url: '/auth/youtube',
+      message: 'Открыт сценарий Google OAuth для YouTube.'
+    },
+    google_business: {
+      status: 'ok',
+      url: '/auth/google',
+      message: 'Открыт сценарий Google Business OAuth.'
+    },
+    instagram_messaging: {
+      status: 'manual_required',
+      url: 'https://developers.facebook.com/apps/',
+      message: 'Токены Meta Messaging нужно обновить вручную в настройках приложения Meta.'
+    },
+    facebook_page: {
+      status: 'manual_required',
+      url: 'https://developers.facebook.com/apps/',
+      message: 'Доступ к Facebook Page нужно переавторизовать в Meta.'
+    },
+    threads: {
+      status: 'manual_required',
+      url: 'https://developers.facebook.com/apps/',
+      message: 'Long-lived токены Threads нужно заново выпустить в Meta, если обновление не сработало.'
+    },
+    crosspost: {
+      status: 'manual_required',
+      url: 'https://developers.facebook.com/apps/',
+      message: 'Кросспост зависит от авторизации Meta, которая используется для Instagram и Facebook.'
+    }
+  };
+
+  return configs[service] || {
+    status: 'manual_required',
+    url: null,
+    message: 'Для этого сервиса ещё не настроен сценарий переавторизации.'
+  };
+}
+
+async function getYouTubeStatsSnapshot() {
+  const supabase = youtubeHandler.supabase;
+  let totalComments = 0;
+  let totalResponses = 0;
+  let processedVideos = 0;
+
+  if (supabase) {
+    const [{ count: commentsCount }, { count: respondedCount }, { data: videos }] = await Promise.all([
+      supabase.from('youtube_processed_comments').select('*', { count: 'exact', head: true }),
+      supabase.from('youtube_processed_comments').select('*', { count: 'exact', head: true }).eq('responded', true),
+      supabase.from('youtube_processed_comments').select('video_id').not('video_id', 'is', null)
+    ]);
+
+    totalComments = commentsCount || 0;
+    totalResponses = respondedCount || 0;
+    processedVideos = new Set((videos || []).map((video) => video.video_id)).size;
+  }
+
+  return {
+    ...youtubeHandler.getStats(),
+    totalComments,
+    totalResponses,
+    processedVideos,
+    lastProcessed: youtubeLastProcessed
+  };
+}
+
+function normalizeGoogleReview(review) {
+  const rating = parseStarRating(review.starRating);
+  const replied = Boolean(review.reviewReply?.comment);
+  const isEscalation = !replied && rating > 0 && rating <= 3;
+
+  return {
+    id: review.reviewId || review.name,
+    reviewName: review.name,
+    reviewer: review.reviewer?.displayName || 'Аноним',
+    rating,
+    comment: review.comment || '',
+    reply: review.reviewReply?.comment || null,
+    status: replied ? 'replied' : (isEscalation ? 'escalation' : 'pending'),
+    createdAt: review.updateTime || review.createTime || null
+  };
+}
+
+async function loadInstagramOperationalData() {
+  const [stats, history, users] = await Promise.all([
+    statsManager.getInstagramStats(),
+    statsManager.getInstagramHistory(),
+    userManager.getAllUsers()
+  ]);
+
+  const queueItems = [
+    ...buffer.dms.map((item, index) => createQueueItem({
+      id: `instagram-dm-${index}-${item.senderId || 'unknown'}`,
+      source: 'instagram',
+      queue: 'direct_messages',
+      title: `Диалог с ${item.senderId ? item.senderId.slice(0, 10) : 'неизвестным пользователем'}`,
+      body: truncateText(item.text || 'Текст сообщения отсутствует'),
+      status: 'pending',
+      priority: 'high',
+      createdAt: item.timestamp || null,
+      meta: 'Сообщение ещё лежит в буфере'
+    })),
+    ...buffer.comments.map((item, index) => createQueueItem({
+      id: `instagram-comment-${index}-${item.commentId || 'unknown'}`,
+      source: 'instagram',
+      queue: 'comments',
+      title: `Комментарий от @${item.username || 'неизвестно'}`,
+      body: truncateText(item.text || 'Текст комментария отсутствует'),
+      status: 'pending',
+      priority: 'normal',
+      createdAt: item.timestamp || null,
+      meta: item.mediaId ? `Публикация ${item.mediaId}` : 'Комментарий ещё лежит в буфере'
+    }))
+  ];
+
+  return {
+    id: 'instagram',
+    name: 'Instagram',
+    authorized: Boolean(process.env.INSTAGRAM_PAGE_ID && (process.env.INSTAGRAM_DM_TOKEN || process.env.INSTAGRAM_REPLY_TOKEN)),
+    stats,
+    history: history.slice(0, 20),
+    users: users.slice(0, 8),
+    queue: {
+      total: queueItems.length,
+      dms: buffer.dms.length,
+      comments: buffer.comments.length,
+      items: queueItems.slice(0, 12)
+    },
+    lastProcessed: history[0]?.timestamp || null
+  };
+}
+
+async function loadYouTubeOperationalData() {
+  const [stats, history] = await Promise.all([
+    getYouTubeStatsSnapshot(),
+    (async () => {
+      const supabase = youtubeHandler.supabase;
+      if (!supabase) return [];
+
+      const { data } = await supabase
+        .from('youtube_processed_comments')
+        .select('*')
+        .eq('responded', true)
+        .order('processed_at', { ascending: false })
+        .limit(12);
+
+      return (data || []).map((row) => ({
+        id: `${row.video_id}-${row.processed_at}`,
+        title: row.video_id || 'Видео YouTube',
+        author: row.author,
+        comment: row.comment_text,
+        response: row.response_text,
+        timestamp: row.processed_at
+      }));
+    })()
+  ]);
+
+  return {
+    id: 'youtube',
+    name: 'YouTube',
+    authorized: youtubeOAuth.isAuthorized(),
+    schedule: '10:00, 14:00, 20:00',
+    stats,
+    history,
+    lastProcessed: stats.lastProcessed || history[0]?.timestamp || null
+  };
+}
+
+async function loadGoogleOperationalData({ includeReviews = true } = {}) {
+  const auth = {
+    authorized: googleBusinessOAuth.isAuthorized(),
+    locationId: process.env.GOOGLE_LOCATION_ID || 'not set',
+    accountId: process.env.GOOGLE_ACCOUNT_ID || 'not set'
+  };
+
+  const reviewStats = await googleReviewsHandler.getStats();
+  let reviews = [];
+  let reviewsError = null;
+
+  if (includeReviews && auth.authorized) {
+    try {
+      const payload = await googleBusinessAPI.getAllReviews();
+      reviews = (payload.reviews || []).map(normalizeGoogleReview);
+    } catch (error) {
+      reviewsError = error.message;
+    }
+  }
+
+  const repliedReviews = reviews.filter((review) => review.status === 'replied');
+  const escalationReviews = reviews.filter((review) => review.status === 'escalation');
+  const pendingReviews = reviews.filter((review) => review.status === 'pending');
+
+  return {
+    id: 'google',
+    name: 'Google Отзывы',
+    ...auth,
+    reviews,
+    reviewsError,
+    stats: {
+      totalReviews: reviews.length,
+      pendingReviews: pendingReviews.length,
+      repliedReviews: repliedReviews.length,
+      escalationReviews: escalationReviews.length,
+      totalReplied: reviewStats.totalReplied || 0,
+      todayReplied: reviewStats.todayReplied || 0
+    }
+  };
+}
+
+async function loadThreadsOperationalData({ includePosts = true } = {}) {
+  const [stats, chartData] = await Promise.all([
+    threadsDB.getStats(),
+    threadsDB.getChartData()
+  ]);
+
+  let posts = [];
+
+  if (includePosts) {
+    const [newPosts, skippedPosts, validatedPosts, repliedPosts] = await Promise.all([
+      threadsDB.getPostsByStatus('new', 25),
+      threadsDB.getPostsByStatus('skipped', 25),
+      threadsDB.getPostsByStatus('validated', 25),
+      threadsDB.getPostsByStatus('replied', 25)
+    ]);
+
+    posts = [...newPosts, ...skippedPosts, ...validatedPosts, ...repliedPosts];
+  }
+
+  return {
+    id: 'threads',
+    name: 'Threads',
+    schedule: ['08:00', '14:00', '20:00'],
+    isSearching: threadsKeywordSearch.isSearching,
+    tokenStatus: threadsAPI.getTokenStatus(),
+    stats,
+    chartData,
+    posts
+  };
+}
+
+async function loadCrosspostOperationalData() {
+  const queueStatus = await crossPostService.getQueueStatus();
+  return {
+    id: 'crosspost',
+    name: 'Кросспост',
+    ...queueStatus
+  };
+}
+
+function buildIntegrationServices({ instagram, youtube, google, threads, crosspost }) {
+  const now = new Date().toISOString();
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  const services = [
+    {
+      id: 'instagram_messaging',
+      name: 'Instagram Direct',
+      provider: 'Meta',
+      status: instagram.authorized ? (instagram.queue.total > 8 ? 'degraded' : 'healthy') : 'reauth_required',
+      summary: instagram.authorized
+        ? `${instagram.queue.total} задач ждут обработки в буфере`
+        : 'В активном окружении нет рабочего токена Instagram',
+      lastCheckedAt: now,
+      lastError: instagram.authorized ? null : 'Токен Instagram Messaging не настроен.',
+      actions: ['process', 'reauthorize']
+    },
+    {
+      id: 'youtube',
+      name: 'YouTube доступ',
+      provider: 'Google',
+      status: youtube.authorized ? 'healthy' : 'reauth_required',
+      summary: youtube.authorized
+        ? `${youtube.stats.totalResponses || 0} ответов уже отправлено`
+        : 'Для доступа к каналу нужна новая авторизация',
+      lastCheckedAt: now,
+      lastError: youtube.authorized ? null : 'Токен YouTube OAuth недоступен.',
+      actions: ['process-channel', 'reauthorize']
+    },
+    {
+      id: 'google_business',
+      name: 'Google Business',
+      provider: 'Google',
+      status: google.authorized ? (google.reviewsError ? 'degraded' : 'healthy') : 'reauth_required',
+      summary: google.authorized
+        ? `${google.stats.pendingReviews} отзывов без ответа, ${google.stats.escalationReviews} требуют эскалации`
+        : 'Для доступа к карточке нужна новая авторизация',
+      lastCheckedAt: now,
+      lastError: google.reviewsError || (google.authorized ? null : 'Refresh token для Google Business не настроен.'),
+      actions: ['preview', 'reauthorize']
+    },
+    {
+      id: 'threads',
+      name: 'Threads токен',
+      provider: 'Meta',
+      status: threads.tokenStatus.hasToken
+        ? (threads.tokenStatus.expired ? 'reauth_required' : 'healthy')
+        : 'reauth_required',
+      summary: threads.tokenStatus.expired
+        ? 'Токен Threads истёк, автообновление не помогло'
+        : `${threads.stats.validated || 0} подходящих публикаций ждут решения`,
+      lastCheckedAt: now,
+      lastError: threads.tokenStatus.error || null,
+      actions: ['search', 'reauthorize']
+    },
+    {
+      id: 'crosspost',
+      name: 'Кросспост',
+      provider: 'Meta / VK / YouTube',
+      status: crosspostFailed > 0 ? 'degraded' : 'healthy',
+      summary: `Ошибки доставки по недавним публикациям: ${crosspostFailed}`,
+      lastCheckedAt: now,
+      lastError: crosspostFailed > 0 ? 'В очереди кросспоста есть каналы с ошибкой доставки.' : null,
+      actions: ['poll', 'retry']
+    }
+  ];
+
+  return services.sort((left, right) => getStatusWeight(left.status) - getStatusWeight(right.status));
+}
+
+function buildOperationalIncidents({ instagram, youtube, google, threads, crosspost, integrations }) {
+  const incidents = [];
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  integrations.forEach((service) => {
+    if (service.status === 'reauth_required') {
+      incidents.push(createIncident({
+        id: `${service.id}-reauth`,
+        severity: 'critical',
+        source: service.name,
+        title: `Нужно заново авторизовать: ${service.name}`,
+        detail: service.lastError || service.summary,
+        actionLabel: 'Открыть авторизацию',
+        actionType: 'reauthorize',
+        actionService: service.id
+      }));
+    } else if (service.status === 'degraded' && service.lastError) {
+      incidents.push(createIncident({
+        id: `${service.id}-degraded`,
+        severity: 'warning',
+        source: service.name,
+        title: `${service.name}: состояние нестабильно`,
+        detail: service.lastError
+      }));
+    }
+  });
+
+  if (google.stats.escalationReviews > 0) {
+    incidents.push(createIncident({
+      id: 'google-negative-reviews',
+      severity: 'critical',
+      source: 'Google Отзывы',
+      title: `${google.stats.escalationReviews} негативных отзывов ждут эскалации`,
+      detail: 'Есть низкие оценки без ответа клиники.'
+    }));
+  }
+
+  if (instagram.queue.total > 0) {
+    incidents.push(createIncident({
+      id: 'instagram-backlog',
+      severity: instagram.queue.total > 8 ? 'critical' : 'warning',
+      source: 'Очередь Instagram',
+      title: `${instagram.queue.total} задач в Instagram ждут обработки`,
+      detail: `${instagram.queue.dms} сообщений и ${instagram.queue.comments} комментариев всё ещё лежат в буфере.`,
+      actionLabel: 'Запустить очередь Instagram',
+      actionType: 'platform_action',
+      actionPlatform: 'instagram',
+      actionName: 'process'
+    }));
+  }
+
+  if ((threads.stats.validated || 0) > 0) {
+    incidents.push(createIncident({
+      id: 'threads-validated-backlog',
+      severity: 'warning',
+      source: 'Threads',
+      title: `${threads.stats.validated} публикаций в Threads ждут решения`,
+      detail: 'Эти публикации прошли фильтр, но ответ по ним ещё не принят.'
+    }));
+  }
+
+  if (crosspostFailed > 0) {
+    incidents.push(createIncident({
+      id: 'crosspost-failures',
+      severity: 'warning',
+      source: 'Кросспост',
+      title: `Ошибки доставки кросспоста: ${crosspostFailed}`,
+      detail: 'Нужен повтор или ручная проверка последних публикаций.',
+      actionLabel: 'Повторить ошибки',
+      actionType: 'platform_action',
+      actionPlatform: 'crosspost',
+      actionName: 'retry'
+    }));
+  }
+
+  return incidents
+    .sort((left, right) => getSeverityWeight(left.severity) - getSeverityWeight(right.severity))
+    .slice(0, 10);
+}
+
+function buildOverviewPayload({ instagram, youtube, google, threads, crosspost, integrations, incidents }) {
+  const healthyIntegrations = integrations.filter((service) => service.status === 'healthy').length;
+  const responsesDelivered = (instagram.stats.responsesSet || 0)
+    + (youtube.stats.totalResponses || 0)
+    + (google.stats.totalReplied || 0)
+    + (threads.stats.replied || 0);
+  const queueTotal = instagram.queue.total
+    + (threads.stats.validated || 0)
+    + (google.stats.pendingReviews || 0)
+    + ((crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      activeIncidents: incidents.length,
+      queuedWork: queueTotal,
+      healthyIntegrations,
+      totalIntegrations: integrations.length,
+      responsesDelivered
+    },
+    metrics: [
+      {
+        id: 'incidents',
+        label: 'Проблемы',
+        value: incidents.length,
+        detail: incidents.filter((incident) => incident.severity === 'critical').length > 0
+          ? `${incidents.filter((incident) => incident.severity === 'critical').length} критично`
+          : 'Критичных проблем нет',
+        tone: incidents.some((incident) => incident.severity === 'critical') ? 'critical' : 'healthy'
+      },
+      {
+        id: 'queues',
+        label: 'Задачи в работе',
+        value: queueTotal,
+        detail: `${instagram.queue.total} в Instagram, ${threads.stats.validated || 0} в Threads, ${google.stats.pendingReviews || 0} в Google`,
+        tone: queueTotal > 0 ? 'warning' : 'healthy'
+      },
+      {
+        id: 'integrations',
+        label: 'Интеграции',
+        value: `${healthyIntegrations}/${integrations.length}`,
+        detail: `${integrations.length - healthyIntegrations} требуют внимания`,
+        tone: healthyIntegrations === integrations.length ? 'healthy' : 'warning'
+      },
+      {
+        id: 'throughput',
+        label: 'Ответов отправлено',
+        value: responsesDelivered,
+        detail: 'Суммарно по активным каналам',
+        tone: 'healthy'
+      }
+    ],
+    incidents,
+    integrations: integrations.map((service) => ({
+      id: service.id,
+      name: service.name,
+      status: service.status,
+      provider: service.provider,
+      summary: service.summary
+    })),
+    attention: [
+      {
+        id: 'queues',
+        title: 'Где копятся задачи',
+        items: [
+          { label: 'Instagram', value: instagram.queue.total, tone: instagram.queue.total > 0 ? 'warning' : 'healthy' },
+          { label: 'Threads', value: threads.stats.validated || 0, tone: (threads.stats.validated || 0) > 0 ? 'warning' : 'healthy' },
+          { label: 'Google', value: google.stats.pendingReviews || 0, tone: (google.stats.pendingReviews || 0) > 0 ? 'warning' : 'healthy' }
+        ]
+      },
+      {
+        id: 'reviews',
+        title: 'Отзывы и репутация',
+        items: [
+          { label: 'Негативные отзывы', value: google.stats.escalationReviews || 0, tone: (google.stats.escalationReviews || 0) > 0 ? 'critical' : 'healthy' },
+          { label: 'Ответы сегодня', value: google.stats.todayReplied || 0, tone: 'healthy' },
+          { label: 'Ответы в Threads', value: threads.stats.replied || 0, tone: 'healthy' }
+        ]
+      },
+      {
+        id: 'delivery',
+        title: 'Автоматизации и доставка',
+        items: [
+          { label: 'Ответы в YouTube', value: youtube.stats.totalResponses || 0, tone: youtube.authorized ? 'healthy' : 'warning' },
+          { label: 'Ошибки кросспоста', value: (crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0), tone: ((crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0)) > 0 ? 'warning' : 'healthy' },
+          { label: 'Ответы из буфера', value: instagram.stats.responsesSet || 0, tone: 'healthy' }
+        ]
+      }
+    ]
+  };
+}
+
+function buildQueuesPayload({ instagram, google, threads, crosspost }) {
+  const googlePendingItems = google.reviews
+    .filter((review) => review.status === 'pending' || review.status === 'escalation')
+    .sort((left, right) => left.rating - right.rating)
+    .slice(0, 12)
+    .map((review) => createQueueItem({
+      id: `google-${review.id}`,
+      source: 'google',
+      queue: 'reviews',
+      title: `${review.rating || 0}-звёздочный отзыв от ${review.reviewer}`,
+      body: truncateText(review.comment || 'Текст отзыва отсутствует'),
+      status: review.status,
+      priority: review.status === 'escalation' ? 'critical' : 'normal',
+      createdAt: review.createdAt,
+      meta: review.status === 'escalation' ? 'Нужна эскалация' : 'Ответ ещё не отправлен'
+    }));
+
+  const threadItems = threads.posts
+    .filter((post) => post.status === 'validated' || post.status === 'new' || post.status === 'skipped')
+    .slice(0, 12)
+    .map((post) => createQueueItem({
+      id: `threads-${post.id}`,
+      source: 'threads',
+      queue: 'candidates',
+      title: `@${post.username || 'неизвестно'}: найден сигнал «${post.keyword_matched || 'совпадение'}»`,
+      body: truncateText(post.text || 'Текст публикации отсутствует'),
+      status: post.status,
+      priority: post.status === 'validated' ? 'high' : 'normal',
+      createdAt: post.created_at,
+      meta: post.reply_text ? truncateText(post.reply_text, 80) : 'Ждёт решения оператора',
+      link: post.permalink || null
+    }));
+
+  const crosspostItems = (crosspost.recentPosts || [])
+    .filter((post) => Object.values(post.statuses || {}).some((status) => status === 'failed' || status === 'pending'))
+    .slice(0, 12)
+    .map((post) => {
+      const failedDestinations = Object.entries(post.statuses || {})
+        .filter(([, status]) => status === 'failed')
+        .map(([platform]) => platform);
+
+      return createQueueItem({
+        id: `crosspost-${post.id}`,
+        source: 'crosspost',
+        queue: 'delivery',
+        title: `Публикация Instagram ${post.instagramId}`,
+        body: truncateText(post.caption || 'Подпись к публикации отсутствует'),
+        status: failedDestinations.length > 0 ? 'failed' : 'pending',
+        priority: failedDestinations.length > 0 ? 'high' : 'normal',
+        createdAt: post.createdAt || post.postedAt,
+        meta: failedDestinations.length > 0
+          ? `Ошибка в каналах: ${failedDestinations.join(', ')}`
+          : 'Доставка по каналам ещё не завершена',
+        link: post.permalink || null
+      });
+    });
+
+  const sections = [
+    {
+      id: 'instagram',
+      label: 'Instagram',
+      description: 'Сообщения и комментарии, которые ещё не ушли в обработку.',
+      tone: instagram.queue.total > 0 ? 'warning' : 'healthy',
+      total: instagram.queue.total,
+      items: instagram.queue.items
+    },
+    {
+      id: 'threads',
+      label: 'Threads',
+      description: 'Найденные публикации, которые требуют решения или ответа.',
+      tone: (threads.stats.validated || 0) > 0 ? 'warning' : 'healthy',
+      total: threadItems.length,
+      items: threadItems
+    },
+    {
+      id: 'google',
+      label: 'Google Отзывы',
+      description: 'Отзывы без ответа, включая низкие оценки с риском для репутации.',
+      tone: google.stats.escalationReviews > 0 ? 'critical' : (google.stats.pendingReviews > 0 ? 'warning' : 'healthy'),
+      total: googlePendingItems.length,
+      items: googlePendingItems
+    },
+    {
+      id: 'crosspost',
+      label: 'Кросспост',
+      description: 'Ошибки доставки и публикации, которые надо повторить.',
+      tone: crosspostItems.some((item) => item.status === 'failed') ? 'warning' : 'healthy',
+      total: crosspostItems.length,
+      items: crosspostItems
+    }
+  ];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    total: sections.reduce((sum, section) => sum + section.total, 0),
+    sections
+  };
+}
+
+function buildPlatformSummary(platform) {
+  return {
+    id: platform.id,
+    name: platform.name,
+    status: platform.status,
+    summary: platform.summary,
+    metrics: platform.metrics
+  };
+}
+
+function buildPlatformsPayload({ instagram, youtube, google, threads, crosspost, integrations }) {
+  const integrationMap = new Map(integrations.map((service) => [service.id, service]));
+  const crosspostFailures = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items: [
+      buildPlatformSummary({
+        id: 'instagram',
+        name: 'Instagram',
+        status: integrationMap.get('instagram_messaging')?.status || 'healthy',
+        summary: `${instagram.queue.total} задач в очереди и ${instagram.stats.responsesSet || 0} уже зафиксированных ответов`,
+        metrics: [
+          { label: 'В буфере', value: instagram.queue.total },
+          { label: 'Ответов', value: instagram.stats.responsesSet || 0 },
+          { label: 'Контактов', value: instagram.stats.uniqueDMSenders || 0 }
+        ]
+      }),
+      buildPlatformSummary({
+        id: 'youtube',
+        name: 'YouTube',
+        status: integrationMap.get('youtube')?.status || 'healthy',
+        summary: `${youtube.stats.totalComments || 0} комментариев обработано, ${youtube.stats.totalResponses || 0} ответов отправлено`,
+        metrics: [
+          { label: 'Видео', value: youtube.stats.processedVideos || 0 },
+          { label: 'Комментарии', value: youtube.stats.totalComments || 0 },
+          { label: 'Ответы', value: youtube.stats.totalResponses || 0 }
+        ]
+      }),
+      buildPlatformSummary({
+        id: 'threads',
+        name: 'Threads',
+        status: integrationMap.get('threads')?.status || 'healthy',
+        summary: `${threads.stats.validated || 0} публикаций ждут решения, ${threads.stats.replied || 0} ответов уже отправлено`,
+        metrics: [
+          { label: 'Найдено', value: threads.stats.postsFound || 0 },
+          { label: 'Проверено', value: threads.stats.validated || 0 },
+          { label: 'С ответом', value: threads.stats.replied || 0 }
+        ]
+      }),
+      buildPlatformSummary({
+        id: 'google',
+        name: 'Google Отзывы',
+        status: integrationMap.get('google_business')?.status || 'healthy',
+        summary: `${google.stats.pendingReviews || 0} отзывов без ответа и ${google.stats.escalationReviews || 0} на эскалации`,
+        metrics: [
+          { label: 'Всего отзывов', value: google.stats.totalReviews || 0 },
+          { label: 'Без ответа', value: google.stats.pendingReviews || 0 },
+          { label: 'Эскалации', value: google.stats.escalationReviews || 0 }
+        ]
+      }),
+      buildPlatformSummary({
+        id: 'crosspost',
+        name: 'Кросспост',
+        status: integrationMap.get('crosspost')?.status || 'healthy',
+        summary: `Ошибки доставки по последним публикациям: ${crosspostFailures}`,
+        metrics: [
+          { label: 'В очереди', value: crosspost.counts?.total || 0 },
+          { label: 'Ошибки', value: crosspostFailures },
+          { label: 'Цикл', value: crosspost.isPolling ? 'Активен' : 'Пауза' }
+        ]
+      })
+    ]
+  };
+}
+
+function buildPlatformDetail(platformId, snapshots) {
+  const { instagram, youtube, google, threads, crosspost, integrations } = snapshots;
+  const integrationMap = new Map(integrations.map((service) => [service.id, service]));
+
+  if (platformId === 'instagram') {
+    return {
+      id: 'instagram',
+      name: 'Instagram',
+      status: integrationMap.get('instagram_messaging')?.status || 'healthy',
+      summary: 'Живой входящий поток сообщений и комментариев аккаунта клиники.',
+      metrics: [
+        { label: 'В буфере', value: instagram.queue.total },
+        { label: 'Отправители DM', value: instagram.stats.uniqueDMSenders || 0 },
+        { label: 'Комментаторы', value: instagram.stats.uniqueCommenters || 0 }
+      ],
+      sections: [
+        {
+          id: 'queue',
+          title: 'Живой входящий поток',
+          items: instagram.queue.items
+        },
+        {
+          id: 'activity',
+          title: 'Последние ответы',
+          items: instagram.history.slice(0, 10).map((item, index) => ({
+            id: `instagram-history-${index}`,
+            title: item.username ? `@${item.username}` : (item.senderId || 'Неизвестный отправитель'),
+            body: truncateText(item.text || (item.messages || []).join(' | ') || ''),
+            meta: item.response ? `Ответ: ${truncateText(item.response, 80)}` : (item.status === 'processed' ? 'Обработано' : (item.status || 'Обработано')),
+            createdAt: item.timestamp || null
+          }))
+        }
+      ]
+    };
+  }
+
+  if (platformId === 'youtube') {
+    return {
+      id: 'youtube',
+      name: 'YouTube',
+      status: integrationMap.get('youtube')?.status || 'healthy',
+      summary: 'Плановая обработка комментариев под последними видео.',
+      metrics: [
+        { label: 'Видео', value: youtube.stats.processedVideos || 0 },
+        { label: 'Комментарии', value: youtube.stats.totalComments || 0 },
+        { label: 'Ответы', value: youtube.stats.totalResponses || 0 }
+      ],
+      sections: [
+        {
+          id: 'history',
+          title: 'Последние ответы',
+          items: youtube.history.slice(0, 10).map((item) => ({
+            id: item.id,
+            title: item.author || 'Неизвестный автор',
+            body: truncateText(item.comment || ''),
+            meta: item.response ? `Ответ: ${truncateText(item.response, 80)}` : item.title,
+            createdAt: item.timestamp || null
+          }))
+        }
+      ]
+    };
+  }
+
+  if (platformId === 'threads') {
+    return {
+      id: 'threads',
+      name: 'Threads',
+      status: integrationMap.get('threads')?.status || 'healthy',
+      summary: 'Поиск публикаций по ключевым словам и отбор тем для ответа.',
+      metrics: [
+        { label: 'API-запросы', value: threads.stats.apiRequests || 0 },
+        { label: 'Проверено', value: threads.stats.validated || 0 },
+        { label: 'Конверсия', value: `${threads.stats.conversionRate || 0}%` }
+      ],
+      sections: [
+        {
+          id: 'validated',
+          title: 'Очередь кандидатов',
+          items: threads.posts
+            .filter((post) => post.status === 'validated' || post.status === 'new' || post.status === 'skipped')
+            .slice(0, 12)
+            .map((post) => ({
+              id: `threads-detail-${post.id}`,
+              title: `@${post.username || 'неизвестно'}`,
+              body: truncateText(post.text || ''),
+              meta: post.keyword_matched ? `Ключевое слово: ${post.keyword_matched}` : getOperationalStatusLabel(post.status),
+              createdAt: post.created_at || null
+            }))
+        }
+      ]
+    };
+  }
+
+  if (platformId === 'google') {
+    const positive = google.reviews.filter((review) => review.status === 'replied').slice(0, 8);
+    const escalations = google.reviews.filter((review) => review.status === 'escalation').slice(0, 8);
+
+    return {
+      id: 'google',
+      name: 'Google Отзывы',
+      status: integrationMap.get('google_business')?.status || 'healthy',
+      summary: 'Отзывы с отдельным приоритетом для негатива и ответов от клиники.',
+      metrics: [
+        { label: 'Без ответа', value: google.stats.pendingReviews || 0 },
+        { label: 'Эскалации', value: google.stats.escalationReviews || 0 },
+        { label: 'Ответы сегодня', value: google.stats.todayReplied || 0 }
+      ],
+      sections: [
+        {
+          id: 'escalations',
+          title: 'Негативные отзывы',
+          items: escalations.map((review) => ({
+            id: `google-escalation-${review.id}`,
+            title: `${review.rating}-звёздочный отзыв от ${review.reviewer}`,
+            body: truncateText(review.comment || ''),
+            meta: 'Нужна эскалация или ручное решение',
+            createdAt: review.createdAt
+          }))
+        },
+        {
+          id: 'positive',
+          title: 'Отзывы с ответом',
+          items: positive.map((review) => ({
+            id: `google-positive-${review.id}`,
+            title: `${review.rating}-звёздочный отзыв от ${review.reviewer}`,
+            body: truncateText(review.comment || ''),
+            meta: review.reply ? `Ответ: ${truncateText(review.reply, 80)}` : 'Ответ уже зафиксирован',
+            createdAt: review.createdAt
+          }))
+        }
+      ]
+    };
+  }
+
+  if (platformId === 'crosspost') {
+    return {
+      id: 'crosspost',
+      name: 'Кросспост',
+      status: integrationMap.get('crosspost')?.status || 'healthy',
+      summary: 'Состояние доставки публикаций в Facebook, YouTube и VK.',
+      metrics: [
+        { label: 'В очереди', value: crosspost.counts?.total || 0 },
+        { label: 'Ошибки Facebook', value: crosspost.counts?.facebook?.failed || 0 },
+        { label: 'Ошибки VK', value: crosspost.counts?.vk?.failed || 0 }
+      ],
+      sections: [
+        {
+          id: 'recent',
+          title: 'Последние попытки доставки',
+          items: (crosspost.recentPosts || []).slice(0, 12).map((post) => ({
+            id: `crosspost-detail-${post.id}`,
+            title: `Публикация ${post.instagramId}`,
+            body: truncateText(post.caption || ''),
+            meta: Object.entries(post.statuses || {})
+              .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
+              .join(' | '),
+            createdAt: post.createdAt || post.postedAt || null
+          }))
+        }
+      ]
+    };
+  }
+
+  return null;
+}
+
+function buildActivityPayload({ instagram, youtube, google, threads, crosspost }) {
+  const activityItems = [
+    ...instagram.history.slice(0, 10).map((item, index) => ({
+      id: `activity-instagram-${index}`,
+      source: 'Instagram',
+      title: item.username ? `Ответ для @${item.username}` : `Диалог ${item.senderId || 'неизвестно'}`,
+      detail: truncateText(item.response || item.text || ''),
+      status: item.error ? 'failed' : (item.responded ? 'sent' : 'processed'),
+      timestamp: item.timestamp || null
+    })),
+    ...youtube.history.slice(0, 8).map((item) => ({
+      id: `activity-youtube-${item.id}`,
+      source: 'YouTube',
+      title: `Ответ пользователю ${item.author || 'зритель'}`,
+      detail: truncateText(item.response || item.comment || ''),
+      status: 'sent',
+      timestamp: item.timestamp || null
+    })),
+    ...google.reviews
+      .filter((review) => review.status === 'replied')
+      .slice(0, 8)
+      .map((review) => ({
+        id: `activity-google-${review.id}`,
+        source: 'Google Отзывы',
+        title: `Ответ для ${review.reviewer}`,
+        detail: truncateText(review.reply || review.comment || ''),
+        status: 'sent',
+        timestamp: review.createdAt || null
+      })),
+    ...threads.posts
+      .filter((post) => post.status === 'replied')
+      .slice(0, 8)
+      .map((post) => ({
+        id: `activity-threads-${post.id}`,
+        source: 'Threads',
+        title: `Ответ для @${post.username || 'неизвестно'}`,
+        detail: truncateText(post.reply_text || post.text || ''),
+        status: 'sent',
+        timestamp: post.replied_at || post.created_at || null
+      })),
+    ...(crosspost.recentPosts || []).slice(0, 8).map((post) => ({
+      id: `activity-crosspost-${post.id}`,
+      source: 'Кросспост',
+      title: `Статус доставки для ${post.instagramId}`,
+      detail: Object.entries(post.statuses || {})
+        .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
+        .join(' | '),
+      status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
+      timestamp: post.createdAt || post.postedAt || null
+    }))
+  ];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items: activityItems
+      .sort((left, right) => {
+        const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : 0;
+        const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 40)
+  };
 }
 
 function unwrapPayload(payload) {
@@ -339,6 +1344,258 @@ app.delete('/api/users/:id/conversation', async (req, res) => {
     await userManager.clearConversation(req.params.id);
     res.json({ status: 'ok' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Operations Cockpit API Routes
+// ==========================================
+
+app.get('/api/overview', async (req, res) => {
+  try {
+    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadYouTubeOperationalData(),
+      loadGoogleOperationalData({ includeReviews: true }),
+      loadThreadsOperationalData({ includePosts: false }),
+      loadCrosspostOperationalData()
+    ]);
+
+    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
+    const incidents = buildOperationalIncidents({ instagram, youtube, google, threads, crosspost, integrations });
+
+    res.json(buildOverviewPayload({
+      instagram,
+      youtube,
+      google,
+      threads,
+      crosspost,
+      integrations,
+      incidents
+    }));
+  } catch (error) {
+    console.error('[API] Overview error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/queues', async (req, res) => {
+  try {
+    const [instagram, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadGoogleOperationalData({ includeReviews: true }),
+      loadThreadsOperationalData({ includePosts: true }),
+      loadCrosspostOperationalData()
+    ]);
+
+    res.json(buildQueuesPayload({ instagram, google, threads, crosspost }));
+  } catch (error) {
+    console.error('[API] Queues error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/platforms', async (req, res) => {
+  try {
+    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadYouTubeOperationalData(),
+      loadGoogleOperationalData({ includeReviews: true }),
+      loadThreadsOperationalData({ includePosts: false }),
+      loadCrosspostOperationalData()
+    ]);
+
+    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
+    res.json(buildPlatformsPayload({ instagram, youtube, google, threads, crosspost, integrations }));
+  } catch (error) {
+    console.error('[API] Platforms error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/platforms/:platform', async (req, res) => {
+  try {
+    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadYouTubeOperationalData(),
+      loadGoogleOperationalData({ includeReviews: true }),
+      loadThreadsOperationalData({ includePosts: true }),
+      loadCrosspostOperationalData()
+    ]);
+
+    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
+    const detail = buildPlatformDetail(req.params.platform, {
+      instagram,
+      youtube,
+      google,
+      threads,
+      crosspost,
+      integrations
+    });
+
+    if (!detail) {
+      return res.status(404).json({ error: 'Неизвестная площадка' });
+    }
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      ...detail
+    });
+  } catch (error) {
+    console.error('[API] Platform detail error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/integrations', async (req, res) => {
+  try {
+    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadYouTubeOperationalData(),
+      loadGoogleOperationalData({ includeReviews: false }),
+      loadThreadsOperationalData({ includePosts: false }),
+      loadCrosspostOperationalData()
+    ]);
+
+    const services = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
+    res.json({
+      generatedAt: new Date().toISOString(),
+      services
+    });
+  } catch (error) {
+    console.error('[API] Integrations error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/integrations/:service/reauthorize', async (req, res) => {
+  try {
+    const config = getServiceReauthConfig(req.params.service);
+    res.json({
+      service: req.params.service,
+      ...config
+    });
+  } catch (error) {
+    console.error('[API] Reauthorize error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/activity', async (req, res) => {
+  try {
+    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
+      loadInstagramOperationalData(),
+      loadYouTubeOperationalData(),
+      loadGoogleOperationalData({ includeReviews: true }),
+      loadThreadsOperationalData({ includePosts: true }),
+      loadCrosspostOperationalData()
+    ]);
+
+    res.json(buildActivityPayload({ instagram, youtube, google, threads, crosspost }));
+  } catch (error) {
+    console.error('[API] Activity error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/platforms/:platform/actions/:action', async (req, res) => {
+  const { platform, action } = req.params;
+
+  try {
+    if (platform === 'instagram' && action === 'process') {
+      const result = await processBuffer();
+      return res.json({
+        status: 'ok',
+        message: 'Очередь Instagram обработана.',
+        result
+      });
+    }
+
+    if (platform === 'youtube' && action === 'process-channel') {
+      const result = await youtubeHandler.processChannelComments(0);
+      youtubeLastProcessed = new Date().toISOString();
+      return res.json({
+        status: 'ok',
+        message: 'Проверка YouTube завершена.',
+        result
+      });
+    }
+
+    if (platform === 'threads' && action === 'search') {
+      if (threadsKeywordSearch.isSearching) {
+        return res.json({
+          status: 'already_searching',
+          message: 'Поиск в Threads уже запущен.'
+        });
+      }
+
+      threadsKeywordSearch.runSearchCycle(0).catch((error) => {
+        console.error('[Threads] Manual search error:', error.message);
+      });
+
+      return res.json({
+        status: 'started',
+        message: 'Поиск в Threads запущен.'
+      });
+    }
+
+    if (platform === 'threads' && action === 'validate') {
+      await threadsKeywordSearch.processNewPosts();
+      return res.json({
+        status: 'ok',
+        message: 'Проверка публикаций в Threads завершена.'
+      });
+    }
+
+    if (platform === 'google' && action === 'preview') {
+      const result = await googleReviewsHandler.processReviews({ dryRun: true });
+      return res.json({
+        status: 'ok',
+        message: 'Черновики ответов Google подготовлены.',
+        result
+      });
+    }
+
+    if (platform === 'google' && action === 'send-test') {
+      const result = await googleReviewsHandler.processReviews({ dryRun: false, limit: 1 });
+      return res.json({
+        status: 'ok',
+        message: 'Один ответ на отзыв Google отправлен.',
+        result
+      });
+    }
+
+    if (platform === 'crosspost' && action === 'poll') {
+      if (crossPostService.isPolling) {
+        return res.json({
+          status: 'already_polling',
+          message: 'Цикл кросспоста уже запущен.'
+        });
+      }
+
+      crossPostService.runPollCycle().catch((error) => {
+        console.error('[CrossPost] Manual poll error:', error.message);
+      });
+
+      return res.json({
+        status: 'started',
+        message: 'Цикл кросспоста запущен.'
+      });
+    }
+
+    if (platform === 'crosspost' && action === 'retry') {
+      const result = await crossPostService.retryFailed();
+      return res.json({
+        status: 'ok',
+        message: 'Повторная доставка кросспоста завершена.',
+        result
+      });
+    }
+
+    return res.status(404).json({ error: 'Неизвестное действие для площадки' });
+  } catch (error) {
+    console.error('[API] Platform action error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

@@ -64,7 +64,7 @@
 ### Send Direct Message
 ```http
 POST https://graph.instagram.com/v24.0/17841448174425966/messages
-Authorization: Bearer IGAAMQuAPDdYVBZAGJDcEFoY0Mzbm1UY2ZALeFFvbTNGY2RSeDdKaWItSzRnZADJBREJlSmtXMFlCZAXZAlVHFqRmUxelZA4QjI2Y09HMDJoSVVRa0tGYTdIbWlZAQ0NvMkhoalBaMTNWcDVacExodlFrVVQwYzdJMUV6VjREWVdJMFNYSQZDZD
+Authorization: Bearer <INSTAGRAM_ACCESS_TOKEN_FROM_ENV_OR_SECURE_STORE>
 Content-Type: application/json
 
 {
@@ -76,13 +76,15 @@ Content-Type: application/json
 ### Reply to Comment
 ```http
 POST https://graph.facebook.com/v21.0/{comment_id}/replies
-Authorization: Bearer EAAU6Hvz29YEBQcmVm3A0v0DBEmwL29FgDS8DX2XrR5S3lyI17DsfGKdAPaDZCIszX3Hnbl49wHnuSn8ZA30Gngf5TuAmnuZCZBZAagkM06MU5jWN7VhO0jPaQZAl5yUlXZCfqQFJ0DhOyhTTofKAkXjPOQOXfsdIIz0D1FxVLokfA8X2xULAvvbqIc8cKJKZAWittsRaV8ak7qGit7EW
+Authorization: Bearer <FACEBOOK_PAGE_OR_USER_TOKEN_FROM_ENV_OR_SECURE_STORE>
 Content-Type: application/json
 
 {
   "message": "@username Ваш ответ"
 }
 ```
+
+> Важно: рабочие bearer-токены не должны храниться в репозитории. Используйте `.env`, Supabase `oauth_tokens` или другой secure store, а все ранее зафиксированные значения считайте скомпрометированными и подлежащими ротации.
 
 ## Формат вебхуков
 
