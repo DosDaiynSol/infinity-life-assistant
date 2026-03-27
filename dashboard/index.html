@@ -1,112 +1,22 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>INFINITY LIFE - Операционный пульт</title>
+  <title>INFINITY LIFE Command Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/pages.css">
 </head>
-
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <p class="brand__eyebrow">Infinity Life</p>
-        <h1 class="brand__title">Операционный пульт</h1>
-        <p class="brand__text">Live-мониторинг событий, инцидентов, интеграций и каналов ассистента клиники.</p>
-      </div>
-
-      <nav class="sidebar__nav" aria-label="Основная навигация">
-        <button class="nav-link is-active" type="button" data-nav="overview">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Сводка</span>
-            <span class="nav-link__hint">Общая картина по health и latency</span>
-          </span>
-        </button>
-        <button class="nav-link" type="button" data-nav="live-feed">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Live Feed</span>
-            <span class="nav-link__hint">Что пришло и что ответили</span>
-          </span>
-        </button>
-        <button class="nav-link" type="button" data-nav="incidents">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Incidents</span>
-            <span class="nav-link__hint">Риски, auth-сбои и delivery issues</span>
-          </span>
-        </button>
-        <button class="nav-link" type="button" data-nav="integrations">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Integrations</span>
-            <span class="nav-link__hint">Токены, reauth и состояние сервисов</span>
-          </span>
-        </button>
-        <button class="nav-link" type="button" data-nav="channels">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Channels</span>
-            <span class="nav-link__hint">Instagram, Google, Threads, YouTube</span>
-          </span>
-        </button>
-        <button class="nav-link" type="button" data-nav="activity">
-          <span class="nav-link__content">
-            <span class="nav-link__label">Журнал</span>
-            <span class="nav-link__hint">Хронология стадий и сервисных событий</span>
-          </span>
-        </button>
-      </nav>
-
-      <section class="sidebar__panel" aria-label="Контур платформ">
-        <p class="sidebar__label">Подключённые площадки</p>
-        <div class="surface-list">
-          <span class="surface-pill">Instagram</span>
-          <span class="surface-pill">YouTube</span>
-          <span class="surface-pill">Threads</span>
-          <span class="surface-pill">Google</span>
-          <span class="surface-pill">Кросспост</span>
-        </div>
-      </section>
-    </aside>
-
-    <div class="workspace">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Пульт ассистента клиники</p>
-          <h2 class="topbar__title" data-hero-title>Сводка</h2>
-          <p class="topbar__text" data-hero-summary>Загружаю операционную сводку...</p>
-        </div>
-
-        <div class="topbar__meta">
-          <div class="meta-pill">
-            <span class="meta-pill__dot"></span>
-            <span>Система активна</span>
-          </div>
-          <div class="meta-block">
-            <span class="meta-block__label">Последнее обновление</span>
-            <strong class="meta-block__value" data-last-sync>Ожидание...</strong>
-          </div>
-          <button class="secondary-button" type="button" data-refresh-current>Обновить экран</button>
-        </div>
-      </header>
-
-      <section class="action-rail" data-quick-actions aria-label="Быстрые действия"></section>
-
-      <main class="page-root" data-page-root aria-live="polite"></main>
-    </div>
-  </div>
-
-  <div class="toast" data-toast hidden></div>
-
-  <script defer src="utils.js"></script>
-  <script defer src="state.js"></script>
-  <script defer src="api.js"></script>
-  <script defer src="renderers.js"></script>
-  <script defer src="app.js"></script>
+  <div data-app-root></div>
+  <script type="module" src="app.js"></script>
 </body>
-
 </html>

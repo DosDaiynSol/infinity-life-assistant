@@ -1,0 +1,55 @@
+.meta-card {
+  display: grid;
+  gap: 6px;
+}
+
+.sidebar-panel {
+  margin-top: auto;
+}
+
+.summary-card .detail-grid,
+.incident-card .detail-grid,
+.timeline-card .detail-grid,
+.activity-row .detail-grid {
+  margin-top: 14px;
+}
+
+.incident-card .detail-grid--compact,
+.timeline-card .detail-grid--compact {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.empty-state {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+  place-content: center;
+  text-align: center;
+}
+
+@media (max-width: 780px) {
+  .drawer__panel {
+    width: 100vw;
+    padding: 18px;
+  }
+
+  .hero__title {
+    font-size: 36px;
+  }
+
+  .brand-card__title {
+    font-size: 24px;
+  }
+
+  .card-actions,
+  .filters-row,
+  .hero__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-control {
+    min-width: auto;
+  }
+}

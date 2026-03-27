@@ -840,6 +840,7 @@ class InstagramLiveAssistant {
             status: event.status,
             decision: event.decision,
             riskLevel: event.riskLevel,
+            incidentId: event.incidentId || null,
             stage: lastStage?.name || 'received',
             stageDetail: lastStage?.detail || '',
             timestamp: event.receivedAt,

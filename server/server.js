@@ -20,8 +20,13 @@ const googleReviewsHandler = require('./handlers/google-reviews');
 const threadsKeywordSearch = require('./services/threads-keyword-search');
 const threadsAPI = require('./services/threads-api');
 const threadsDB = require('./services/threads-database');
-const crossPostService = require('./services/crosspost-service');
 const schedule = require('node-schedule');
+const {
+  createDashboardIncident,
+  buildCommandCenterOverviewPayload,
+  buildCommandCenterIncidentsPayload,
+  parseIncidentResolutionInput
+} = require('./dashboard/contracts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -155,32 +160,8 @@ function getOperationalStatusLabel(status) {
   return statusMap[status] || status;
 }
 
-function createIncident({
-  id,
-  severity,
-  source,
-  title,
-  detail,
-  actionLabel = null,
-  actionType = null,
-  actionPlatform = null,
-  actionName = null,
-  actionService = null,
-  actionUrl = null
-}) {
-  return {
-    id,
-    severity,
-    source,
-    title,
-    detail,
-    actionLabel,
-    actionType,
-    actionPlatform,
-    actionName,
-    actionService,
-    actionUrl
-  };
+function createIncident(input) {
+  return createDashboardIncident(input);
 }
 
 function createQueueItem({
@@ -240,11 +221,6 @@ function getServiceReauthConfig(service) {
       status: 'manual_required',
       url: 'https://developers.facebook.com/apps/',
       message: 'Long-lived токены Threads нужно заново выпустить в Meta, если обновление не сработало.'
-    },
-    crosspost: {
-      status: 'manual_required',
-      url: 'https://developers.facebook.com/apps/',
-      message: 'Кросспост зависит от авторизации Meta, которая используется для Instagram и Facebook.'
     }
   };
 
@@ -253,6 +229,145 @@ function getServiceReauthConfig(service) {
     url: null,
     message: 'Для этого сервиса ещё не настроен сценарий переавторизации.'
   };
+}
+
+function createResolveAction() {
+  return {
+    kind: 'resolve',
+    label: 'Resolve incident'
+  };
+}
+
+function createReauthorizeAction(service) {
+  return {
+    kind: 'reauthorize',
+    label: 'Reauthorize',
+    service
+  };
+}
+
+function createContextAction(page, itemId) {
+  if (!page || !itemId) {
+    return null;
+  }
+
+  return {
+    kind: 'open_context',
+    label: 'Open related context',
+    page,
+    itemId
+  };
+}
+
+function getInstagramIncidentSource(incident) {
+  if (incident.service === 'instagram_meta') {
+    return 'Instagram Auth';
+  }
+
+  if (incident.meta?.channel === 'comment') {
+    return 'Instagram Comment';
+  }
+
+  return 'Instagram DM';
+}
+
+function findRelatedLiveFeedContext(liveFeed, incidentId) {
+  const relatedItem = (liveFeed || []).find((item) => item.incidentId === incidentId);
+
+  if (!relatedItem) {
+    return null;
+  }
+
+  return {
+    page: 'live-feed',
+    itemId: relatedItem.id
+  };
+}
+
+function mapStoredIncidentToDashboardIncident(incident, liveFeed) {
+  const relatedContext = findRelatedLiveFeedContext(liveFeed, incident.id);
+  const actions = [];
+  const recommendedAction = incident.service === 'instagram_meta'
+    ? createReauthorizeAction('instagram_meta')
+    : createResolveAction();
+
+  actions.push(recommendedAction);
+
+  const contextAction = createContextAction(relatedContext?.page, relatedContext?.itemId);
+  if (contextAction) {
+    actions.push(contextAction);
+  }
+
+  return createIncident({
+    id: incident.id,
+    severity: incident.severity,
+    source: getInstagramIncidentSource(incident),
+    service: incident.service,
+    title: incident.title,
+    detail: incident.detail,
+    state: incident.state || 'open',
+    openedAt: incident.openedAt || incident.updatedAt || null,
+    updatedAt: incident.updatedAt || incident.openedAt || null,
+    resolvedAt: incident.resolvedAt || null,
+    count: incident.count || 1,
+    reasonCode: incident.reasonCode || null,
+    meta: incident.meta || {},
+    relatedContext,
+    recommendedAction,
+    actions
+  });
+}
+
+function mapReauthIncident(service) {
+  const relatedContext = {
+    page: 'integrations',
+    itemId: service.id
+  };
+  const reauthorizeAction = createReauthorizeAction(service.id);
+  const contextAction = createContextAction(relatedContext.page, relatedContext.itemId);
+
+  return createIncident({
+    id: `${service.id}-reauth`,
+    severity: 'critical',
+    source: service.name,
+    service: service.id,
+    title: `Reauthorization required: ${service.name}`,
+    detail: service.lastError || service.summary,
+    state: 'open',
+    openedAt: service.lastCheckedAt || new Date().toISOString(),
+    updatedAt: service.lastCheckedAt || new Date().toISOString(),
+    count: 1,
+    reasonCode: `${service.id}_reauth_required`,
+    meta: {
+      provider: service.provider,
+      lastError: service.lastError || null
+    },
+    relatedContext,
+    recommendedAction: reauthorizeAction,
+    actions: [reauthorizeAction, contextAction].filter(Boolean)
+  });
+}
+
+function mapEscalationIncident({ id, service, source, title, detail, severity = 'critical', reasonCode, meta, relatedContext }) {
+  const contextAction = createContextAction(relatedContext?.page, relatedContext?.itemId);
+
+  return createIncident({
+    id,
+    severity,
+    source,
+    service,
+    title,
+    detail,
+    state: 'open',
+    openedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    count: 1,
+    reasonCode,
+    meta,
+    relatedContext,
+    recommendedAction: contextAction,
+    actions: contextAction ? [contextAction] : []
+  });
 }
 
 async function getYouTubeStatsSnapshot() {
@@ -456,668 +571,6 @@ async function loadThreadsOperationalData({ includePosts = true } = {}) {
   };
 }
 
-async function loadCrosspostOperationalData() {
-  const queueStatus = await crossPostService.getQueueStatus();
-  return {
-    id: 'crosspost',
-    name: 'Кросспост',
-    ...queueStatus
-  };
-}
-
-function buildIntegrationServices({ instagram, youtube, google, threads, crosspost }) {
-  const now = new Date().toISOString();
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
-
-  const services = [
-    {
-      id: 'instagram_messaging',
-      name: 'Instagram Direct',
-      provider: 'Meta',
-      status: instagram.authorized ? (instagram.queue.total > 8 ? 'degraded' : 'healthy') : 'reauth_required',
-      summary: instagram.authorized
-        ? `${instagram.queue.total} задач ждут обработки в буфере`
-        : 'В активном окружении нет рабочего токена Instagram',
-      lastCheckedAt: now,
-      lastError: instagram.authorized ? null : 'Токен Instagram Messaging не настроен.',
-      actions: ['process', 'reauthorize']
-    },
-    {
-      id: 'youtube',
-      name: 'YouTube доступ',
-      provider: 'Google',
-      status: youtube.authorized ? 'healthy' : 'reauth_required',
-      summary: youtube.authorized
-        ? `${youtube.stats.totalResponses || 0} ответов уже отправлено`
-        : 'Для доступа к каналу нужна новая авторизация',
-      lastCheckedAt: now,
-      lastError: youtube.authorized ? null : 'Токен YouTube OAuth недоступен.',
-      actions: ['process-channel', 'reauthorize']
-    },
-    {
-      id: 'google_business',
-      name: 'Google Business',
-      provider: 'Google',
-      status: google.authorized ? (google.reviewsError ? 'degraded' : 'healthy') : 'reauth_required',
-      summary: google.authorized
-        ? `${google.stats.pendingReviews} отзывов без ответа, ${google.stats.escalationReviews} требуют эскалации`
-        : 'Для доступа к карточке нужна новая авторизация',
-      lastCheckedAt: now,
-      lastError: google.reviewsError || (google.authorized ? null : 'Refresh token для Google Business не настроен.'),
-      actions: ['preview', 'reauthorize']
-    },
-    {
-      id: 'threads',
-      name: 'Threads токен',
-      provider: 'Meta',
-      status: threads.tokenStatus.hasToken
-        ? (threads.tokenStatus.expired ? 'reauth_required' : 'healthy')
-        : 'reauth_required',
-      summary: threads.tokenStatus.expired
-        ? 'Токен Threads истёк, автообновление не помогло'
-        : `${threads.stats.validated || 0} подходящих публикаций ждут решения`,
-      lastCheckedAt: now,
-      lastError: threads.tokenStatus.error || null,
-      actions: ['search', 'reauthorize']
-    },
-    {
-      id: 'crosspost',
-      name: 'Кросспост',
-      provider: 'Meta / VK / YouTube',
-      status: crosspostFailed > 0 ? 'degraded' : 'healthy',
-      summary: `Ошибки доставки по недавним публикациям: ${crosspostFailed}`,
-      lastCheckedAt: now,
-      lastError: crosspostFailed > 0 ? 'В очереди кросспоста есть каналы с ошибкой доставки.' : null,
-      actions: ['poll', 'retry']
-    }
-  ];
-
-  return services.sort((left, right) => getStatusWeight(left.status) - getStatusWeight(right.status));
-}
-
-function buildOperationalIncidents({ instagram, youtube, google, threads, crosspost, integrations }) {
-  const incidents = [];
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
-
-  integrations.forEach((service) => {
-    if (service.status === 'reauth_required') {
-      incidents.push(createIncident({
-        id: `${service.id}-reauth`,
-        severity: 'critical',
-        source: service.name,
-        title: `Нужно заново авторизовать: ${service.name}`,
-        detail: service.lastError || service.summary,
-        actionLabel: 'Открыть авторизацию',
-        actionType: 'reauthorize',
-        actionService: service.id
-      }));
-    } else if (service.status === 'degraded' && service.lastError) {
-      incidents.push(createIncident({
-        id: `${service.id}-degraded`,
-        severity: 'warning',
-        source: service.name,
-        title: `${service.name}: состояние нестабильно`,
-        detail: service.lastError
-      }));
-    }
-  });
-
-  if (google.stats.escalationReviews > 0) {
-    incidents.push(createIncident({
-      id: 'google-negative-reviews',
-      severity: 'critical',
-      source: 'Google Отзывы',
-      title: `${google.stats.escalationReviews} негативных отзывов ждут эскалации`,
-      detail: 'Есть низкие оценки без ответа клиники.'
-    }));
-  }
-
-  if (instagram.queue.total > 0) {
-    incidents.push(createIncident({
-      id: 'instagram-backlog',
-      severity: instagram.queue.total > 8 ? 'critical' : 'warning',
-      source: 'Очередь Instagram',
-      title: `${instagram.queue.total} задач в Instagram ждут обработки`,
-      detail: `${instagram.queue.dms} сообщений и ${instagram.queue.comments} комментариев всё ещё лежат в буфере.`,
-      actionLabel: 'Запустить очередь Instagram',
-      actionType: 'platform_action',
-      actionPlatform: 'instagram',
-      actionName: 'process'
-    }));
-  }
-
-  if ((threads.stats.validated || 0) > 0) {
-    incidents.push(createIncident({
-      id: 'threads-validated-backlog',
-      severity: 'warning',
-      source: 'Threads',
-      title: `${threads.stats.validated} публикаций в Threads ждут решения`,
-      detail: 'Эти публикации прошли фильтр, но ответ по ним ещё не принят.'
-    }));
-  }
-
-  if (crosspostFailed > 0) {
-    incidents.push(createIncident({
-      id: 'crosspost-failures',
-      severity: 'warning',
-      source: 'Кросспост',
-      title: `Ошибки доставки кросспоста: ${crosspostFailed}`,
-      detail: 'Нужен повтор или ручная проверка последних публикаций.',
-      actionLabel: 'Повторить ошибки',
-      actionType: 'platform_action',
-      actionPlatform: 'crosspost',
-      actionName: 'retry'
-    }));
-  }
-
-  return incidents
-    .sort((left, right) => getSeverityWeight(left.severity) - getSeverityWeight(right.severity))
-    .slice(0, 10);
-}
-
-function buildOverviewPayload({ instagram, youtube, google, threads, crosspost, integrations, incidents }) {
-  const healthyIntegrations = integrations.filter((service) => service.status === 'healthy').length;
-  const responsesDelivered = (instagram.stats.responsesSet || 0)
-    + (youtube.stats.totalResponses || 0)
-    + (google.stats.totalReplied || 0)
-    + (threads.stats.replied || 0);
-  const queueTotal = instagram.queue.total
-    + (threads.stats.validated || 0)
-    + (google.stats.pendingReviews || 0)
-    + ((crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0));
-
-  return {
-    generatedAt: new Date().toISOString(),
-    summary: {
-      activeIncidents: incidents.length,
-      queuedWork: queueTotal,
-      healthyIntegrations,
-      totalIntegrations: integrations.length,
-      responsesDelivered
-    },
-    metrics: [
-      {
-        id: 'incidents',
-        label: 'Проблемы',
-        value: incidents.length,
-        detail: incidents.filter((incident) => incident.severity === 'critical').length > 0
-          ? `${incidents.filter((incident) => incident.severity === 'critical').length} критично`
-          : 'Критичных проблем нет',
-        tone: incidents.some((incident) => incident.severity === 'critical') ? 'critical' : 'healthy'
-      },
-      {
-        id: 'queues',
-        label: 'Задачи в работе',
-        value: queueTotal,
-        detail: `${instagram.queue.total} в Instagram, ${threads.stats.validated || 0} в Threads, ${google.stats.pendingReviews || 0} в Google`,
-        tone: queueTotal > 0 ? 'warning' : 'healthy'
-      },
-      {
-        id: 'integrations',
-        label: 'Интеграции',
-        value: `${healthyIntegrations}/${integrations.length}`,
-        detail: `${integrations.length - healthyIntegrations} требуют внимания`,
-        tone: healthyIntegrations === integrations.length ? 'healthy' : 'warning'
-      },
-      {
-        id: 'throughput',
-        label: 'Ответов отправлено',
-        value: responsesDelivered,
-        detail: 'Суммарно по активным каналам',
-        tone: 'healthy'
-      }
-    ],
-    incidents,
-    integrations: integrations.map((service) => ({
-      id: service.id,
-      name: service.name,
-      status: service.status,
-      provider: service.provider,
-      summary: service.summary
-    })),
-    attention: [
-      {
-        id: 'queues',
-        title: 'Где копятся задачи',
-        items: [
-          { label: 'Instagram', value: instagram.queue.total, tone: instagram.queue.total > 0 ? 'warning' : 'healthy' },
-          { label: 'Threads', value: threads.stats.validated || 0, tone: (threads.stats.validated || 0) > 0 ? 'warning' : 'healthy' },
-          { label: 'Google', value: google.stats.pendingReviews || 0, tone: (google.stats.pendingReviews || 0) > 0 ? 'warning' : 'healthy' }
-        ]
-      },
-      {
-        id: 'reviews',
-        title: 'Отзывы и репутация',
-        items: [
-          { label: 'Негативные отзывы', value: google.stats.escalationReviews || 0, tone: (google.stats.escalationReviews || 0) > 0 ? 'critical' : 'healthy' },
-          { label: 'Ответы сегодня', value: google.stats.todayReplied || 0, tone: 'healthy' },
-          { label: 'Ответы в Threads', value: threads.stats.replied || 0, tone: 'healthy' }
-        ]
-      },
-      {
-        id: 'delivery',
-        title: 'Автоматизации и доставка',
-        items: [
-          { label: 'Ответы в YouTube', value: youtube.stats.totalResponses || 0, tone: youtube.authorized ? 'healthy' : 'warning' },
-          { label: 'Ошибки кросспоста', value: (crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0), tone: ((crosspost.counts?.facebook?.failed || 0) + (crosspost.counts?.youtube?.failed || 0) + (crosspost.counts?.vk?.failed || 0)) > 0 ? 'warning' : 'healthy' },
-          { label: 'Ответы из буфера', value: instagram.stats.responsesSet || 0, tone: 'healthy' }
-        ]
-      }
-    ]
-  };
-}
-
-function buildQueuesPayload({ instagram, google, threads, crosspost }) {
-  const googlePendingItems = google.reviews
-    .filter((review) => review.status === 'pending' || review.status === 'escalation')
-    .sort((left, right) => left.rating - right.rating)
-    .slice(0, 12)
-    .map((review) => createQueueItem({
-      id: `google-${review.id}`,
-      source: 'google',
-      queue: 'reviews',
-      title: `${review.rating || 0}-звёздочный отзыв от ${review.reviewer}`,
-      body: truncateText(review.comment || 'Текст отзыва отсутствует'),
-      status: review.status,
-      priority: review.status === 'escalation' ? 'critical' : 'normal',
-      createdAt: review.createdAt,
-      meta: review.status === 'escalation' ? 'Нужна эскалация' : 'Ответ ещё не отправлен'
-    }));
-
-  const threadItems = threads.posts
-    .filter((post) => post.status === 'validated' || post.status === 'new' || post.status === 'skipped')
-    .slice(0, 12)
-    .map((post) => createQueueItem({
-      id: `threads-${post.id}`,
-      source: 'threads',
-      queue: 'candidates',
-      title: `@${post.username || 'неизвестно'}: найден сигнал «${post.keyword_matched || 'совпадение'}»`,
-      body: truncateText(post.text || 'Текст публикации отсутствует'),
-      status: post.status,
-      priority: post.status === 'validated' ? 'high' : 'normal',
-      createdAt: post.created_at,
-      meta: post.reply_text ? truncateText(post.reply_text, 80) : 'Ждёт решения оператора',
-      link: post.permalink || null
-    }));
-
-  const crosspostItems = (crosspost.recentPosts || [])
-    .filter((post) => Object.values(post.statuses || {}).some((status) => status === 'failed' || status === 'pending'))
-    .slice(0, 12)
-    .map((post) => {
-      const failedDestinations = Object.entries(post.statuses || {})
-        .filter(([, status]) => status === 'failed')
-        .map(([platform]) => platform);
-
-      return createQueueItem({
-        id: `crosspost-${post.id}`,
-        source: 'crosspost',
-        queue: 'delivery',
-        title: `Публикация Instagram ${post.instagramId}`,
-        body: truncateText(post.caption || 'Подпись к публикации отсутствует'),
-        status: failedDestinations.length > 0 ? 'failed' : 'pending',
-        priority: failedDestinations.length > 0 ? 'high' : 'normal',
-        createdAt: post.createdAt || post.postedAt,
-        meta: failedDestinations.length > 0
-          ? `Ошибка в каналах: ${failedDestinations.join(', ')}`
-          : 'Доставка по каналам ещё не завершена',
-        link: post.permalink || null
-      });
-    });
-
-  const sections = [
-    {
-      id: 'instagram',
-      label: 'Instagram',
-      description: 'Сообщения и комментарии, которые ещё не ушли в обработку.',
-      tone: instagram.queue.total > 0 ? 'warning' : 'healthy',
-      total: instagram.queue.total,
-      items: instagram.queue.items
-    },
-    {
-      id: 'threads',
-      label: 'Threads',
-      description: 'Найденные публикации, которые требуют решения или ответа.',
-      tone: (threads.stats.validated || 0) > 0 ? 'warning' : 'healthy',
-      total: threadItems.length,
-      items: threadItems
-    },
-    {
-      id: 'google',
-      label: 'Google Отзывы',
-      description: 'Отзывы без ответа, включая низкие оценки с риском для репутации.',
-      tone: google.stats.escalationReviews > 0 ? 'critical' : (google.stats.pendingReviews > 0 ? 'warning' : 'healthy'),
-      total: googlePendingItems.length,
-      items: googlePendingItems
-    },
-    {
-      id: 'crosspost',
-      label: 'Кросспост',
-      description: 'Ошибки доставки и публикации, которые надо повторить.',
-      tone: crosspostItems.some((item) => item.status === 'failed') ? 'warning' : 'healthy',
-      total: crosspostItems.length,
-      items: crosspostItems
-    }
-  ];
-
-  return {
-    generatedAt: new Date().toISOString(),
-    total: sections.reduce((sum, section) => sum + section.total, 0),
-    sections
-  };
-}
-
-function buildPlatformSummary(platform) {
-  return {
-    id: platform.id,
-    name: platform.name,
-    status: platform.status,
-    summary: platform.summary,
-    metrics: platform.metrics
-  };
-}
-
-function buildPlatformsPayload({ instagram, youtube, google, threads, crosspost, integrations }) {
-  const integrationMap = new Map(integrations.map((service) => [service.id, service]));
-  const crosspostFailures = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
-
-  return {
-    generatedAt: new Date().toISOString(),
-    items: [
-      buildPlatformSummary({
-        id: 'instagram',
-        name: 'Instagram',
-        status: integrationMap.get('instagram_messaging')?.status || 'healthy',
-        summary: `${instagram.queue.total} задач в очереди и ${instagram.stats.responsesSet || 0} уже зафиксированных ответов`,
-        metrics: [
-          { label: 'В буфере', value: instagram.queue.total },
-          { label: 'Ответов', value: instagram.stats.responsesSet || 0 },
-          { label: 'Контактов', value: instagram.stats.uniqueDMSenders || 0 }
-        ]
-      }),
-      buildPlatformSummary({
-        id: 'youtube',
-        name: 'YouTube',
-        status: integrationMap.get('youtube')?.status || 'healthy',
-        summary: `${youtube.stats.totalComments || 0} комментариев обработано, ${youtube.stats.totalResponses || 0} ответов отправлено`,
-        metrics: [
-          { label: 'Видео', value: youtube.stats.processedVideos || 0 },
-          { label: 'Комментарии', value: youtube.stats.totalComments || 0 },
-          { label: 'Ответы', value: youtube.stats.totalResponses || 0 }
-        ]
-      }),
-      buildPlatformSummary({
-        id: 'threads',
-        name: 'Threads',
-        status: integrationMap.get('threads')?.status || 'healthy',
-        summary: `${threads.stats.validated || 0} публикаций ждут решения, ${threads.stats.replied || 0} ответов уже отправлено`,
-        metrics: [
-          { label: 'Найдено', value: threads.stats.postsFound || 0 },
-          { label: 'Проверено', value: threads.stats.validated || 0 },
-          { label: 'С ответом', value: threads.stats.replied || 0 }
-        ]
-      }),
-      buildPlatformSummary({
-        id: 'google',
-        name: 'Google Отзывы',
-        status: integrationMap.get('google_business')?.status || 'healthy',
-        summary: `${google.stats.pendingReviews || 0} отзывов без ответа и ${google.stats.escalationReviews || 0} на эскалации`,
-        metrics: [
-          { label: 'Всего отзывов', value: google.stats.totalReviews || 0 },
-          { label: 'Без ответа', value: google.stats.pendingReviews || 0 },
-          { label: 'Эскалации', value: google.stats.escalationReviews || 0 }
-        ]
-      }),
-      buildPlatformSummary({
-        id: 'crosspost',
-        name: 'Кросспост',
-        status: integrationMap.get('crosspost')?.status || 'healthy',
-        summary: `Ошибки доставки по последним публикациям: ${crosspostFailures}`,
-        metrics: [
-          { label: 'В очереди', value: crosspost.counts?.total || 0 },
-          { label: 'Ошибки', value: crosspostFailures },
-          { label: 'Цикл', value: crosspost.isPolling ? 'Активен' : 'Пауза' }
-        ]
-      })
-    ]
-  };
-}
-
-function buildPlatformDetail(platformId, snapshots) {
-  const { instagram, youtube, google, threads, crosspost, integrations } = snapshots;
-  const integrationMap = new Map(integrations.map((service) => [service.id, service]));
-
-  if (platformId === 'instagram') {
-    return {
-      id: 'instagram',
-      name: 'Instagram',
-      status: integrationMap.get('instagram_messaging')?.status || 'healthy',
-      summary: 'Живой входящий поток сообщений и комментариев аккаунта клиники.',
-      metrics: [
-        { label: 'В буфере', value: instagram.queue.total },
-        { label: 'Отправители DM', value: instagram.stats.uniqueDMSenders || 0 },
-        { label: 'Комментаторы', value: instagram.stats.uniqueCommenters || 0 }
-      ],
-      sections: [
-        {
-          id: 'queue',
-          title: 'Живой входящий поток',
-          items: instagram.queue.items
-        },
-        {
-          id: 'activity',
-          title: 'Последние ответы',
-          items: instagram.history.slice(0, 10).map((item, index) => ({
-            id: `instagram-history-${index}`,
-            title: item.username ? `@${item.username}` : (item.senderId || 'Неизвестный отправитель'),
-            body: truncateText(item.text || (item.messages || []).join(' | ') || ''),
-            meta: item.response ? `Ответ: ${truncateText(item.response, 80)}` : (item.status === 'processed' ? 'Обработано' : (item.status || 'Обработано')),
-            createdAt: item.timestamp || null
-          }))
-        }
-      ]
-    };
-  }
-
-  if (platformId === 'youtube') {
-    return {
-      id: 'youtube',
-      name: 'YouTube',
-      status: integrationMap.get('youtube')?.status || 'healthy',
-      summary: 'Плановая обработка комментариев под последними видео.',
-      metrics: [
-        { label: 'Видео', value: youtube.stats.processedVideos || 0 },
-        { label: 'Комментарии', value: youtube.stats.totalComments || 0 },
-        { label: 'Ответы', value: youtube.stats.totalResponses || 0 }
-      ],
-      sections: [
-        {
-          id: 'history',
-          title: 'Последние ответы',
-          items: youtube.history.slice(0, 10).map((item) => ({
-            id: item.id,
-            title: item.author || 'Неизвестный автор',
-            body: truncateText(item.comment || ''),
-            meta: item.response ? `Ответ: ${truncateText(item.response, 80)}` : item.title,
-            createdAt: item.timestamp || null
-          }))
-        }
-      ]
-    };
-  }
-
-  if (platformId === 'threads') {
-    return {
-      id: 'threads',
-      name: 'Threads',
-      status: integrationMap.get('threads')?.status || 'healthy',
-      summary: 'Поиск публикаций по ключевым словам и отбор тем для ответа.',
-      metrics: [
-        { label: 'API-запросы', value: threads.stats.apiRequests || 0 },
-        { label: 'Проверено', value: threads.stats.validated || 0 },
-        { label: 'Конверсия', value: `${threads.stats.conversionRate || 0}%` }
-      ],
-      sections: [
-        {
-          id: 'validated',
-          title: 'Очередь кандидатов',
-          items: threads.posts
-            .filter((post) => post.status === 'validated' || post.status === 'new' || post.status === 'skipped')
-            .slice(0, 12)
-            .map((post) => ({
-              id: `threads-detail-${post.id}`,
-              title: `@${post.username || 'неизвестно'}`,
-              body: truncateText(post.text || ''),
-              meta: post.keyword_matched ? `Ключевое слово: ${post.keyword_matched}` : getOperationalStatusLabel(post.status),
-              createdAt: post.created_at || null
-            }))
-        }
-      ]
-    };
-  }
-
-  if (platformId === 'google') {
-    const positive = google.reviews.filter((review) => review.status === 'replied').slice(0, 8);
-    const escalations = google.reviews.filter((review) => review.status === 'escalation').slice(0, 8);
-
-    return {
-      id: 'google',
-      name: 'Google Отзывы',
-      status: integrationMap.get('google_business')?.status || 'healthy',
-      summary: 'Отзывы с отдельным приоритетом для негатива и ответов от клиники.',
-      metrics: [
-        { label: 'Без ответа', value: google.stats.pendingReviews || 0 },
-        { label: 'Эскалации', value: google.stats.escalationReviews || 0 },
-        { label: 'Ответы сегодня', value: google.stats.todayReplied || 0 }
-      ],
-      sections: [
-        {
-          id: 'escalations',
-          title: 'Негативные отзывы',
-          items: escalations.map((review) => ({
-            id: `google-escalation-${review.id}`,
-            title: `${review.rating}-звёздочный отзыв от ${review.reviewer}`,
-            body: truncateText(review.comment || ''),
-            meta: 'Нужна эскалация или ручное решение',
-            createdAt: review.createdAt
-          }))
-        },
-        {
-          id: 'positive',
-          title: 'Отзывы с ответом',
-          items: positive.map((review) => ({
-            id: `google-positive-${review.id}`,
-            title: `${review.rating}-звёздочный отзыв от ${review.reviewer}`,
-            body: truncateText(review.comment || ''),
-            meta: review.reply ? `Ответ: ${truncateText(review.reply, 80)}` : 'Ответ уже зафиксирован',
-            createdAt: review.createdAt
-          }))
-        }
-      ]
-    };
-  }
-
-  if (platformId === 'crosspost') {
-    return {
-      id: 'crosspost',
-      name: 'Кросспост',
-      status: integrationMap.get('crosspost')?.status || 'healthy',
-      summary: 'Состояние доставки публикаций в Facebook, YouTube и VK.',
-      metrics: [
-        { label: 'В очереди', value: crosspost.counts?.total || 0 },
-        { label: 'Ошибки Facebook', value: crosspost.counts?.facebook?.failed || 0 },
-        { label: 'Ошибки VK', value: crosspost.counts?.vk?.failed || 0 }
-      ],
-      sections: [
-        {
-          id: 'recent',
-          title: 'Последние попытки доставки',
-          items: (crosspost.recentPosts || []).slice(0, 12).map((post) => ({
-            id: `crosspost-detail-${post.id}`,
-            title: `Публикация ${post.instagramId}`,
-            body: truncateText(post.caption || ''),
-            meta: Object.entries(post.statuses || {})
-              .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
-              .join(' | '),
-            createdAt: post.createdAt || post.postedAt || null
-          }))
-        }
-      ]
-    };
-  }
-
-  return null;
-}
-
-function buildActivityPayload({ instagram, youtube, google, threads, crosspost }) {
-  const activityItems = [
-    ...instagram.history.slice(0, 10).map((item, index) => ({
-      id: `activity-instagram-${index}`,
-      source: 'Instagram',
-      title: item.username ? `Ответ для @${item.username}` : `Диалог ${item.senderId || 'неизвестно'}`,
-      detail: truncateText(item.response || item.text || ''),
-      status: item.error ? 'failed' : (item.responded ? 'sent' : 'processed'),
-      timestamp: item.timestamp || null
-    })),
-    ...youtube.history.slice(0, 8).map((item) => ({
-      id: `activity-youtube-${item.id}`,
-      source: 'YouTube',
-      title: `Ответ пользователю ${item.author || 'зритель'}`,
-      detail: truncateText(item.response || item.comment || ''),
-      status: 'sent',
-      timestamp: item.timestamp || null
-    })),
-    ...google.reviews
-      .filter((review) => review.status === 'replied')
-      .slice(0, 8)
-      .map((review) => ({
-        id: `activity-google-${review.id}`,
-        source: 'Google Отзывы',
-        title: `Ответ для ${review.reviewer}`,
-        detail: truncateText(review.reply || review.comment || ''),
-        status: 'sent',
-        timestamp: review.createdAt || null
-      })),
-    ...threads.posts
-      .filter((post) => post.status === 'replied')
-      .slice(0, 8)
-      .map((post) => ({
-        id: `activity-threads-${post.id}`,
-        source: 'Threads',
-        title: `Ответ для @${post.username || 'неизвестно'}`,
-        detail: truncateText(post.reply_text || post.text || ''),
-        status: 'sent',
-        timestamp: post.replied_at || post.created_at || null
-      })),
-    ...(crosspost.recentPosts || []).slice(0, 8).map((post) => ({
-      id: `activity-crosspost-${post.id}`,
-      source: 'Кросспост',
-      title: `Статус доставки для ${post.instagramId}`,
-      detail: Object.entries(post.statuses || {})
-        .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
-        .join(' | '),
-      status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
-      timestamp: post.createdAt || post.postedAt || null
-    }))
-  ];
-
-  return {
-    generatedAt: new Date().toISOString(),
-    items: activityItems
-      .sort((left, right) => {
-        const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : 0;
-        const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : 0;
-        return rightTime - leftTime;
-      })
-      .slice(0, 40)
-  };
-}
-
 function unwrapPayload(payload) {
   if (!payload || typeof payload !== 'object') return payload;
 
@@ -1139,11 +592,8 @@ function toArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
-function buildRealtimeIntegrationServices({ instagramRealtime, youtube, google, threads, crosspost }) {
+function buildRealtimeIntegrationServices({ instagramRealtime, youtube, google, threads }) {
   const now = new Date().toISOString();
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
 
   const services = [
     {
@@ -1188,72 +638,39 @@ function buildRealtimeIntegrationServices({ instagramRealtime, youtube, google, 
       lastCheckedAt: now,
       lastError: threads.tokenStatus.error || (threads.tokenStatus.hasToken ? null : 'Токен Threads не найден.'),
       actions: ['reauthorize']
-    },
-    {
-      id: 'crosspost',
-      name: 'Кросспост',
-      provider: 'Meta / VK / YouTube',
-      status: crosspostFailed > 0 ? 'degraded' : 'healthy',
-      summary: crosspostFailed > 0
-        ? `${crosspostFailed} последних доставок завершились ошибкой`
-        : 'Последние доставки прошли без ошибок',
-      lastCheckedAt: now,
-      lastError: crosspostFailed > 0 ? 'Есть ошибки в недавних доставках кросспоста.' : null,
-      actions: []
     }
   ];
 
   return services.sort((left, right) => getStatusWeight(left.status) - getStatusWeight(right.status));
 }
 
-function buildRealtimeDashboardIncidents({ instagramRealtime, integrations, google, crosspost }) {
-  const incidents = instagramRealtime.incidents.map((incident) => createIncident({
-    id: incident.id,
-    severity: incident.severity,
-    source: incident.service,
-    title: incident.title,
-    detail: incident.detail,
-    actionLabel: incident.service === 'instagram_meta' ? 'Открыть авторизацию' : null,
-    actionType: incident.service === 'instagram_meta' ? 'reauthorize' : null,
-    actionService: incident.service === 'instagram_meta' ? 'instagram_meta' : null
-  }));
+function buildRealtimeDashboardIncidents({ instagramRealtime, integrations, google }) {
+  const incidents = instagramRealtime.incidents.map((incident) => (
+    mapStoredIncidentToDashboardIncident(incident, instagramRealtime.liveFeed)
+  ));
 
   integrations
     .filter((service) => service.status === 'reauth_required' && service.id !== 'instagram_meta')
     .forEach((service) => {
-      incidents.push(createIncident({
-        id: `${service.id}-reauth`,
-        severity: 'critical',
-        source: service.name,
-        title: `Нужна повторная авторизация: ${service.name}`,
-        detail: service.lastError || service.summary,
-        actionLabel: 'Открыть авторизацию',
-        actionType: 'reauthorize',
-        actionService: service.id
-      }));
+      incidents.push(mapReauthIncident(service));
     });
 
   if ((google.stats.escalationReviews || 0) > 0) {
-    incidents.push(createIncident({
+    incidents.push(mapEscalationIncident({
       id: 'google-escalation-reviews',
-      severity: 'critical',
       source: 'Google Отзывы',
+      service: 'google_business',
       title: `${google.stats.escalationReviews} отзывов требуют эскалации`,
-      detail: 'Найдены отзывы с повышенным репутационным риском.'
-    }));
-  }
-
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
-
-  if (crosspostFailed > 0) {
-    incidents.push(createIncident({
-      id: 'crosspost-delivery-failures',
-      severity: 'warning',
-      source: 'Кросспост',
-      title: `${crosspostFailed} недавних ошибок доставки`,
-      detail: 'Есть публикации, которые не дошли до всех каналов.'
+      detail: 'Найдены отзывы с повышенным репутационным риском.',
+      reasonCode: 'google_escalation_reviews',
+      meta: {
+        escalationReviews: google.stats.escalationReviews || 0,
+        pendingReviews: google.stats.pendingReviews || 0
+      },
+      relatedContext: {
+        page: 'channels',
+        itemId: 'google'
+      }
     }));
   }
 
@@ -1262,75 +679,15 @@ function buildRealtimeDashboardIncidents({ instagramRealtime, integrations, goog
     .slice(0, 20);
 }
 
-function buildRealtimeOverviewPayload({ instagramRealtime, youtube, google, threads, crosspost, integrations, incidents }) {
-  const degradedIntegrations = integrations.filter((service) => service.status !== 'healthy').length;
-  const responsesDelivered = (instagramRealtime.metrics.delivered || 0)
-    + (youtube.stats.totalResponses || 0)
-    + (google.stats.totalReplied || 0)
-    + (threads.stats.replied || 0);
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
-
-  return {
-    generatedAt: new Date().toISOString(),
-    summary: {
-      openIncidents: incidents.length,
-      degradedIntegrations,
-      totalIntegrations: integrations.length,
-      liveEvents: instagramRealtime.metrics.inbound || 0,
-      autoReplies: instagramRealtime.metrics.autoReplies || 0,
-      safeFallbacks: instagramRealtime.metrics.safeFallbacks || 0,
-      escalations: instagramRealtime.metrics.escalations || 0,
-      p95ReplySeconds: instagramRealtime.metrics.p95ReplySeconds,
-      responsesDelivered
-    },
-    metrics: [
-      {
-        id: 'incidents',
-        label: 'Инциденты',
-        value: incidents.length,
-        detail: incidents.filter((incident) => incident.severity === 'critical').length > 0
-          ? `${incidents.filter((incident) => incident.severity === 'critical').length} критичных`
-          : 'Критичных нет',
-        tone: incidents.some((incident) => incident.severity === 'critical') ? 'critical' : 'healthy'
-      },
-      {
-        id: 'latency',
-        label: 'P95 ответ',
-        value: instagramRealtime.metrics.p95ReplySeconds === null
-          ? 'n/a'
-          : `${instagramRealtime.metrics.p95ReplySeconds.toFixed(1)}s`,
-        detail: 'Instagram live reply latency',
-        tone: instagramRealtime.metrics.p95ReplySeconds !== null && instagramRealtime.metrics.p95ReplySeconds > 5
-          ? 'warning'
-          : 'healthy'
-      },
-      {
-        id: 'delivery',
-        label: 'Доставлено',
-        value: responsesDelivered,
-        detail: `${instagramRealtime.metrics.failed || 0} ошибок Instagram, ${crosspostFailed} ошибок кросспоста`,
-        tone: (instagramRealtime.metrics.failed || 0) > 0 ? 'warning' : 'healthy'
-      },
-      {
-        id: 'integrations',
-        label: 'Интеграции',
-        value: `${integrations.length - degradedIntegrations}/${integrations.length}`,
-        detail: `${degradedIntegrations} требуют внимания`,
-        tone: degradedIntegrations > 0 ? 'warning' : 'healthy'
-      }
-    ],
-    incidents: incidents.slice(0, 8),
-    liveFeed: instagramRealtime.liveFeed.slice(0, 8),
-    integrations: integrations.map((service) => ({
-      id: service.id,
-      name: service.name,
-      provider: service.provider,
-      status: service.status,
-      summary: service.summary
-    }))
-  };
+function buildRealtimeOverviewPayload({ instagramRealtime, youtube, google, threads, integrations, incidents }) {
+  return buildCommandCenterOverviewPayload({
+    instagramRealtime,
+    youtube,
+    google,
+    threads,
+    integrations,
+    incidents
+  });
 }
 
 function buildLiveFeedPayload(instagramRealtime) {
@@ -1341,22 +698,11 @@ function buildLiveFeedPayload(instagramRealtime) {
 }
 
 function buildIncidentsPayload(incidents) {
-  return {
-    generatedAt: new Date().toISOString(),
-    summary: {
-      total: incidents.length,
-      critical: incidents.filter((incident) => incident.severity === 'critical').length,
-      warning: incidents.filter((incident) => incident.severity === 'warning').length
-    },
-    items: incidents
-  };
+  return buildCommandCenterIncidentsPayload(incidents);
 }
 
-function buildChannelsPayload({ instagramRealtime, youtube, google, threads, crosspost, integrations }) {
+function buildChannelsPayload({ instagramRealtime, youtube, google, threads, integrations }) {
   const integrationMap = new Map(integrations.map((service) => [service.id, service]));
-  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
-    + (crosspost.counts?.youtube?.failed || 0)
-    + (crosspost.counts?.vk?.failed || 0);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -1432,32 +778,12 @@ function buildChannelsPayload({ instagramRealtime, youtube, google, threads, cro
           status: post.status,
           timestamp: post.replied_at || post.created_at
         }))
-      },
-      {
-        id: 'crosspost',
-        name: 'Кросспост',
-        status: integrationMap.get('crosspost')?.status || 'healthy',
-        summary: 'Состояние доставки публикаций по каналам.',
-        metrics: [
-          { label: 'В очереди', value: crosspost.counts?.total || 0 },
-          { label: 'Ошибки', value: crosspostFailed },
-          { label: 'Цикл', value: crosspost.isPolling ? 'Активен' : 'Пауза' }
-        ],
-        recent: (crosspost.recentPosts || []).slice(0, 5).map((post) => ({
-          id: `crosspost-${post.id}`,
-          title: `Публикация ${post.instagramId}`,
-          detail: Object.entries(post.statuses || {})
-            .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
-            .join(' | '),
-          status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
-          timestamp: post.createdAt || post.postedAt
-        }))
       }
     ]
   };
 }
 
-function buildRealtimeActivityPayload({ instagramActivity, youtube, google, threads, crosspost }) {
+function buildRealtimeActivityPayload({ instagramActivity, youtube, google, threads }) {
   const items = [
     ...instagramActivity.map((item) => ({
       id: item.id,
@@ -1496,17 +822,7 @@ function buildRealtimeActivityPayload({ instagramActivity, youtube, google, thre
         detail: truncateText(post.reply_text || post.text || '', 120),
         status: 'sent',
         timestamp: post.replied_at || post.created_at
-      })),
-    ...(crosspost.recentPosts || []).slice(0, 8).map((post) => ({
-      id: `activity-crosspost-${post.id}`,
-      source: 'Кросспост',
-      title: `Статус доставки для ${post.instagramId}`,
-      detail: Object.entries(post.statuses || {})
-        .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
-        .join(' | '),
-      status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
-      timestamp: post.createdAt || post.postedAt || null
-    }))
+      }))
   ];
 
   return {
@@ -1522,20 +838,18 @@ function buildRealtimeActivityPayload({ instagramActivity, youtube, google, thre
 }
 
 async function loadRealtimeDashboardSnapshots({ includeGoogleReviews = true, includeThreadPosts = true } = {}) {
-  const [instagramRealtime, youtube, google, threads, crosspost] = await Promise.all([
+  const [instagramRealtime, youtube, google, threads] = await Promise.all([
     assistantRuntime.getInstagramSummary(),
     loadYouTubeOperationalData(),
     loadGoogleOperationalData({ includeReviews: includeGoogleReviews }),
-    loadThreadsOperationalData({ includePosts: includeThreadPosts }),
-    loadCrosspostOperationalData()
+    loadThreadsOperationalData({ includePosts: includeThreadPosts })
   ]);
 
   const integrations = buildRealtimeIntegrationServices({
     instagramRealtime,
     youtube,
     google,
-    threads,
-    crosspost
+    threads
   });
 
   return {
@@ -1543,7 +857,6 @@ async function loadRealtimeDashboardSnapshots({ includeGoogleReviews = true, inc
     youtube,
     google,
     threads,
-    crosspost,
     integrations
   };
 }
@@ -1754,6 +1067,38 @@ app.get('/api/incidents', async (req, res) => {
   }
 });
 
+app.post('/api/incidents/:id/resolve', async (req, res) => {
+  const incidentId = typeof req.params.id === 'string'
+    ? req.params.id.trim()
+    : '';
+
+  if (!incidentId) {
+    return res.status(400).json({ error: 'incident id is required' });
+  }
+
+  try {
+    const { resolutionDetail } = parseIncidentResolutionInput(req.body);
+    const resolvedIncident = await assistantRuntime.incidentManager.resolveIncident(incidentId, resolutionDetail);
+
+    if (!resolvedIncident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    const instagramRealtime = await assistantRuntime.getInstagramSummary();
+
+    return res.json({
+      incident: mapStoredIncidentToDashboardIncident(resolvedIncident, instagramRealtime.liveFeed)
+    });
+  } catch (error) {
+    if (error.message && error.message.includes('resolutionDetail')) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.error('[API] Resolve incident error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/channels', async (req, res) => {
   try {
     const snapshots = await loadRealtimeDashboardSnapshots({
@@ -1812,8 +1157,7 @@ app.get('/api/activity', async (req, res) => {
       instagramActivity,
       youtube: snapshots.youtube,
       google: snapshots.google,
-      threads: snapshots.threads,
-      crosspost: snapshots.crosspost
+      threads: snapshots.threads
     }));
   } catch (error) {
     console.error('[API] Activity error:', error.message);
@@ -1898,33 +1242,6 @@ app.post('/api/platforms/:platform/actions/:action', async (req, res) => {
       return res.json({
         status: 'ok',
         message: 'Один ответ на отзыв Google отправлен.',
-        result
-      });
-    }
-
-    if (platform === 'crosspost' && action === 'poll') {
-      if (crossPostService.isPolling) {
-        return res.json({
-          status: 'already_polling',
-          message: 'Цикл кросспоста уже запущен.'
-        });
-      }
-
-      crossPostService.runPollCycle().catch((error) => {
-        console.error('[CrossPost] Manual poll error:', error.message);
-      });
-
-      return res.json({
-        status: 'started',
-        message: 'Цикл кросспоста запущен.'
-      });
-    }
-
-    if (platform === 'crosspost' && action === 'retry') {
-      const result = await crossPostService.retryFailed();
-      return res.json({
-        status: 'ok',
-        message: 'Повторная доставка кросспоста завершена.',
         result
       });
     }
@@ -2446,63 +1763,6 @@ schedule.scheduleJob('0 20 * * *', async () => {
   await threadsKeywordSearch.runSearchCycle(2);
 });
 
-// ==========================================
-// Cross-Posting API Routes
-// ==========================================
-
-// CrossPost status
-app.get('/api/crosspost/status', async (req, res) => {
-  try {
-    const status = await crossPostService.getQueueStatus();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Manual trigger - run poll cycle now
-app.post('/api/crosspost/poll', async (req, res) => {
-  try {
-    if (crossPostService.isPolling) {
-      return res.json({ status: 'already_polling', message: 'Polling уже запущен' });
-    }
-
-    console.log('[CrossPost] Manual poll triggered');
-    res.json({ status: 'started', message: 'Polling запущен' });
-
-    // Run async
-    crossPostService.runPollCycle().then(result => {
-      console.log('[CrossPost] Manual poll result:', JSON.stringify(result));
-    }).catch(err => {
-      console.error('[CrossPost] Manual poll error:', err.message);
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Retry failed cross-posts
-app.post('/api/crosspost/retry', async (req, res) => {
-  try {
-    const result = await crossPostService.retryFailed();
-    res.json({ status: 'ok', ...result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Schedule CrossPost polling every 5 minutes
-schedule.scheduleJob('*/5 * * * *', async () => {
-  console.log('[CrossPost Schedule] Running poll cycle...');
-  await crossPostService.runPollCycle();
-});
-
-// Also run once 60s after server start
-setTimeout(() => {
-  console.log('[CrossPost] Initial poll after startup...');
-  crossPostService.runPollCycle();
-}, 60000);
-
 // Dashboard route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
@@ -2520,5 +1780,5 @@ app.listen(PORT, () => {
   console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}`);
   console.log(`📍 Google Business authorized: ${googleBusinessOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/google'}`);
   console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00`);
-  console.log(`🔄 CrossPost polling: every 5 minutes\n`);
+  console.log('');
 });
