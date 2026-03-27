@@ -7,25 +7,35 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
 });
 
 const statusLabels = Object.freeze({
-  critical: 'Critical',
-  warning: 'Warning',
-  healthy: 'Healthy',
-  neutral: 'Neutral',
-  open: 'Open',
-  resolved: 'Resolved',
-  pending: 'Pending',
-  degraded: 'Degraded',
-  reauth_required: 'Reauth required',
-  sent: 'Sent',
-  processed: 'Processed',
-  replied: 'Replied',
-  failed: 'Failed',
-  escalation: 'Escalation',
-  escalated: 'Escalated',
-  skipped: 'Skipped',
-  merged: 'Merged',
-  auto_reply: 'Auto reply',
-  safe_fallback: 'Safe fallback'
+  critical: 'Критично',
+  warning: 'Внимание',
+  healthy: 'Норма',
+  neutral: 'Нейтрально',
+  open: 'Открыто',
+  resolved: 'Закрыто',
+  pending: 'Ожидает',
+  degraded: 'Ограничено',
+  reauth_required: 'Требуется авторизация',
+  sent: 'Отправлено',
+  processed: 'Обработано',
+  replied: 'Отвечено',
+  failed: 'Ошибка',
+  escalation: 'Эскалация',
+  escalated: 'Требует внимания',
+  skipped: 'Закрыто',
+  merged: 'Объединено',
+  auto_reply: 'Автоответ',
+  safe_fallback: 'Безопасный ответ',
+  new: 'Новое',
+  ai_processed: 'Обработано ИИ',
+  needs_attention: 'Требует внимания',
+  closed: 'Закрыто',
+  error: 'Ошибка',
+  tracking: 'В SLA',
+  breached: 'SLA нарушен',
+  not_applicable: 'Без SLA',
+  list: 'Список',
+  grouped: 'По пользователям'
 });
 
 export function formatNumber(value) {
@@ -42,12 +52,12 @@ export function formatNumber(value) {
 
 export function formatDateTime(value) {
   if (!value) {
-    return 'No timestamp';
+    return 'Нет данных';
   }
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return 'Invalid date';
+    return 'Неверная дата';
   }
 
   return dateTimeFormatter.format(parsed);
@@ -58,7 +68,7 @@ export function formatLatency(seconds) {
     return 'n/a';
   }
 
-  return `${Number(seconds).toFixed(1)}s`;
+  return `${Number(seconds).toFixed(1)}с`;
 }
 
 export function escapeHtml(value) {
@@ -83,15 +93,15 @@ export function getStatusLabel(status) {
 }
 
 export function toneFromStatus(status) {
-  if (['critical', 'reauth_required', 'failed', 'escalation', 'escalated'].includes(status)) {
+  if (['critical', 'reauth_required', 'failed', 'escalation', 'escalated', 'error', 'breached'].includes(status)) {
     return 'critical';
   }
 
-  if (['warning', 'degraded', 'pending', 'safe_fallback', 'open'].includes(status)) {
+  if (['warning', 'degraded', 'pending', 'safe_fallback', 'open', 'needs_attention', 'tracking'].includes(status)) {
     return 'warning';
   }
 
-  if (['healthy', 'sent', 'processed', 'merged', 'auto_reply', 'resolved'].includes(status)) {
+  if (['healthy', 'sent', 'processed', 'merged', 'auto_reply', 'resolved', 'ai_processed', 'closed'].includes(status)) {
     return 'healthy';
   }
 

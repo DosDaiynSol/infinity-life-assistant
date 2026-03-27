@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход | INFINITY LIFE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/auth.css">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-card">
+      <p class="eyebrow">INFINITY LIFE</p>
+      <h1 class="auth-card__title">Вход в Command Center</h1>
+      <p class="auth-card__copy">Единый кабинет для обращений, интеграций и ручного контроля ИИ.</p>
+      <form class="auth-form" data-auth-login>
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label class="auth-field">
+          <span>Пароль</span>
+          <input type="password" name="password" required minlength="8" autocomplete="current-password">
+        </label>
+        <button class="auth-submit" type="submit">Войти</button>
+      </form>
+      <p class="auth-message" data-auth-message></p>
+      <a class="auth-link" href="/register">Зарегистрироваться</a>
+      <a class="auth-link" href="/forgot-password">Забыли пароль?</a>
+    </section>
+  </main>
+  <script type="module" src="login.js"></script>
+</body>
+</html>

@@ -1,87 +1,49 @@
-import { filterIncidents, filterLiveFeed } from '../filters.mjs';
-import { formatNumber, getStatusLabel } from '../format.mjs';
 import {
-  renderActivityItem,
+  renderBanner,
   renderEmptyState,
+  renderFilterInput,
   renderFilterSelect,
-  renderIncidentCard,
-  renderIntegrationCard,
-  renderLiveFeedItem,
+  renderInstagramGroupCard,
+  renderInteractionCard,
   renderMetricCards,
   renderPanelHeader,
-  renderChannelHealthCard
+  renderServiceCard
 } from './components.mjs';
 
 function renderOverviewPage(data, state) {
   return `
     <div class="page-stack">
       ${renderMetricCards(data.summary.cards || [])}
+      ${renderBanner(data.degradedBanner)}
       <section class="page-grid page-grid--command">
         <article class="surface-panel">
           ${renderPanelHeader({
-            eyebrow: 'Triage board',
-            title: 'Actionable incidents',
-            subtitle: 'Critical and warning cases sorted for operator attention first.'
+            eyebrow: 'Срочные обращения',
+            title: 'Что требует реакции сейчас',
+            subtitle: 'Новые, просроченные и проблемные обращения из всех сервисов.'
           })}
           <div class="stack-list">
-            ${(data.triage?.items || []).length
-              ? data.triage.items.map((incident) => renderIncidentCard(incident, {
+            ${(data.urgent?.items || []).length
+              ? data.urgent.items.map((item) => renderInteractionCard(item, {
                 page: 'overview',
                 pendingAction: state.pendingAction
               })).join('')
-              : renderEmptyState('No open incidents', 'The system has no active operator-facing incidents right now.')}
+              : renderEmptyState('Новых обращений нет', 'Каналы подключены. Как только появятся новые события, они окажутся здесь.')}
           </div>
         </article>
         <article class="surface-panel">
           ${renderPanelHeader({
-            eyebrow: 'Live decisions',
-            title: 'Recent DM and comment handling',
-            subtitle: 'Latest policy decisions, responses, and latency snapshots.'
-          })}
-          <div class="stack-list">
-            ${(data.liveFeed?.items || []).length
-              ? data.liveFeed.items.map((item) => renderLiveFeedItem(item, {
-                page: 'overview'
-              })).join('')
-              : renderEmptyState('Feed is quiet', 'New webhook events will appear here in realtime.')}
-          </div>
-        </article>
-      </section>
-      <section class="page-grid page-grid--support">
-        <article class="surface-panel">
-          ${renderPanelHeader({
-            eyebrow: 'Channel health',
-            title: 'Operational scorecards',
-            subtitle: 'Workload, top risk, and recent delivery by channel.'
+            eyebrow: 'Статус каналов',
+            title: 'Контроль интеграций',
+            subtitle: 'Быстрый срез по каналам, ошибкам и ручным действиям.'
           })}
           <div class="summary-grid">
-            ${(data.channelHealth?.items || []).map(renderChannelHealthCard).join('')}
-          </div>
-        </article>
-        <article class="surface-panel">
-          ${renderPanelHeader({
-            eyebrow: 'Integration risk',
-            title: 'Auth posture and failure surface',
-            subtitle: 'What is degraded, what needs consent again, and what remains healthy.'
-          })}
-          <div class="stack-list">
-            ${(data.integrationHealth?.riskSummary || []).length
-              ? data.integrationHealth.riskSummary.map((risk) => `
-                <div class="risk-row">
-                  <div>
-                    <h4 class="card-title">${risk.name}</h4>
-                    <p class="card-copy">${risk.detail}</p>
-                  </div>
-                  <span class="detail-chip">${getStatusLabel(risk.status)}</span>
-                </div>
-              `).join('')
-              : renderEmptyState('All integrations healthy', 'No auth or runtime risks are currently surfaced.')}
-          </div>
-          <div class="summary-grid summary-grid--narrow">
-            ${(data.integrationHealth?.items || []).map((service) => renderIntegrationCard(service, {
-              page: 'overview',
-              pendingAction: state.pendingAction
-            })).join('')}
+            ${(data.services?.items || []).length
+              ? data.services.items.map((service) => renderServiceCard(service, {
+                page: 'overview',
+                pendingAction: state.pendingAction
+              })).join('')
+              : renderEmptyState('Интеграции пока не найдены', 'Подключите сервисы, чтобы видеть их статус и статистику.')}
           </div>
         </article>
       </section>
@@ -89,171 +51,107 @@ function renderOverviewPage(data, state) {
   `;
 }
 
-function renderIncidentsPage(data, state) {
-  const filters = state.filtersByPage.incidents;
-  const items = filterIncidents(data.items || [], filters);
+function renderInteractionsPage(data, state) {
+  const filters = state.filtersByPage.interactions;
+  const items = data.data || [];
+  const grouped = data.meta?.grouped;
 
   return `
     <div class="page-stack">
-      ${renderMetricCards([
-        {
-          label: 'Open incidents',
-          value: data.summary.open,
-          detail: `${formatNumber(data.summary.critical)} critical / ${formatNumber(data.summary.warning)} warning`,
-          tone: data.summary.critical > 0 ? 'critical' : (data.summary.warning > 0 ? 'warning' : 'healthy')
-        },
-        {
-          label: 'Resolved',
-          value: data.summary.resolved,
-          detail: 'Lifecycle closed cases',
-          tone: 'healthy'
-        }
-      ])}
       <article class="surface-panel">
         ${renderPanelHeader({
-          eyebrow: 'Board controls',
-          title: 'Filter the incident board',
-          subtitle: 'Slice by severity, source, state, or switch between urgency and recent ordering.'
+          eyebrow: 'Фильтры',
+          title: 'Лог обращений',
+          subtitle: 'Единый журнал по Instagram, Threads, Google Reviews и YouTube.'
         })}
         <div class="filters-row">
           ${renderFilterSelect({
-            page: 'incidents',
-            key: 'severity',
-            value: filters.severity,
-            label: 'Severity',
-            options: (data.filters?.severity || ['all', 'critical', 'warning']).map((value) => ({
-              value,
-              label: value === 'all' ? 'All' : getStatusLabel(value)
-            }))
-          })}
-          ${renderFilterSelect({
-            page: 'incidents',
-            key: 'source',
-            value: filters.source,
-            label: 'Source',
-            options: (data.filters?.source || ['all']).map((value) => ({
-              value,
-              label: value === 'all' ? 'All sources' : value
-            }))
-          })}
-          ${renderFilterSelect({
-            page: 'incidents',
-            key: 'state',
-            value: filters.state,
-            label: 'State',
-            options: (data.filters?.state || ['all', 'open', 'resolved']).map((value) => ({
-              value,
-              label: value === 'all' ? 'All states' : getStatusLabel(value)
-            }))
-          })}
-          ${renderFilterSelect({
-            page: 'incidents',
-            key: 'sort',
-            value: filters.sort,
-            label: 'Sort',
+            page: 'interactions',
+            key: 'service',
+            value: filters.service,
+            label: 'Сервис',
             options: [
-              { value: 'urgency', label: 'Urgency' },
-              { value: 'recent', label: 'Recent' }
+              { value: 'all', label: 'Все сервисы' },
+              { value: 'instagram_dm', label: 'Сообщения Instagram' },
+              { value: 'instagram_comment', label: 'Комментарии Instagram' },
+              { value: 'google_reviews', label: 'Google Reviews' },
+              { value: 'threads', label: 'Threads' },
+              { value: 'youtube', label: 'YouTube' }
             ]
           })}
-        </div>
-      </article>
-      <article class="surface-panel">
-        ${renderPanelHeader({
-          eyebrow: 'Incident board',
-          title: 'Resolve or reauthorize from one place',
-          subtitle: 'Open the drawer for context, then close the loop without navigating away.'
-        })}
-        <div class="stack-list">
-          ${items.length
-            ? items.map((incident) => renderIncidentCard(incident, {
-              page: 'incidents',
-              pendingAction: state.pendingAction
-            })).join('')
-            : renderEmptyState('No incidents match the filters', 'Try widening the filters or switch to recent ordering.')}
-        </div>
-      </article>
-    </div>
-  `;
-}
-
-function renderLiveFeedPage(data, state) {
-  const channelOptions = ['all', ...new Set((data.items || []).map((item) => item.channel).filter(Boolean))];
-  const decisionOptions = ['all', ...new Set((data.items || []).map((item) => item.decision).filter(Boolean))];
-  const statusOptions = ['all', ...new Set((data.items || []).map((item) => item.status).filter(Boolean))];
-  const filters = state.filtersByPage['live-feed'];
-  const items = filterLiveFeed(data.items || [], filters);
-
-  return `
-    <div class="page-stack">
-      <article class="surface-panel">
-        ${renderPanelHeader({
-          eyebrow: 'Feed controls',
-          title: 'Filter the live decisions stream',
-          subtitle: 'Inspect only DMs, only escalations, or only items with a specific delivery state.'
-        })}
-        <div class="filters-row">
           ${renderFilterSelect({
-            page: 'live-feed',
-            key: 'channel',
-            value: filters.channel,
-            label: 'Channel',
-            options: channelOptions.map((value) => ({
-              value,
-              label: value === 'all' ? 'All channels' : value
-            }))
-          })}
-          ${renderFilterSelect({
-            page: 'live-feed',
-            key: 'decision',
-            value: filters.decision,
-            label: 'Decision',
-            options: decisionOptions.map((value) => ({
-              value,
-              label: value === 'all' ? 'All decisions' : getStatusLabel(value)
-            }))
-          })}
-          ${renderFilterSelect({
-            page: 'live-feed',
+            page: 'interactions',
             key: 'status',
             value: filters.status,
-            label: 'Status',
-            options: statusOptions.map((value) => ({
-              value,
-              label: value === 'all' ? 'All statuses' : getStatusLabel(value)
-            }))
+            label: 'Статус',
+            options: [
+              { value: 'all', label: 'Все статусы' },
+              { value: 'new', label: 'Новое' },
+              { value: 'ai_processed', label: 'Обработано ИИ' },
+              { value: 'needs_attention', label: 'Требует внимания' },
+              { value: 'closed', label: 'Закрыто' },
+              { value: 'error', label: 'Ошибка' }
+            ]
+          })}
+          ${renderFilterSelect({
+            page: 'interactions',
+            key: 'sla',
+            value: filters.sla,
+            label: 'SLA',
+            options: [
+              { value: 'all', label: 'Все' },
+              { value: 'breached', label: 'SLA нарушен' }
+            ]
+          })}
+          ${renderFilterSelect({
+            page: 'interactions',
+            key: 'onlyUnprocessed',
+            value: filters.onlyUnprocessed,
+            label: 'Необработанные',
+            options: [
+              { value: 'false', label: 'Все обращения' },
+              { value: 'true', label: 'Только необработанные' }
+            ]
+          })}
+          ${renderFilterSelect({
+            page: 'interactions',
+            key: 'view',
+            value: filters.view,
+            label: 'Вид',
+            options: [
+              { value: 'list', label: 'Список' },
+              { value: 'grouped', label: 'По пользователям' }
+            ]
+          })}
+          ${renderFilterInput({
+            page: 'interactions',
+            key: 'query',
+            value: filters.query,
+            label: 'Поиск',
+            placeholder: 'Имя, текст, id, ссылка'
           })}
         </div>
       </article>
       <article class="surface-panel">
         ${renderPanelHeader({
-          eyebrow: 'Timeline',
-          title: 'Realtime webhook handling',
-          subtitle: 'Every item keeps the source text, response text, decision, latency, and last update.'
+          eyebrow: grouped ? 'Группировка Instagram' : 'Журнал событий',
+          title: grouped ? 'Диалоги по пользователям' : 'Все обращения',
+          subtitle: grouped
+            ? 'Для Instagram DM показана сгруппированная лента по контактам.'
+            : 'Каждое обращение отображается отдельной карточкой.'
         })}
         <div class="stack-list">
           ${items.length
-            ? items.map((item) => renderLiveFeedItem(item, {
-              page: 'live-feed'
-            })).join('')
-            : renderEmptyState('No events match the filters', 'Try widening the channel, decision, or status filters.')}
-        </div>
-      </article>
-    </div>
-  `;
-}
-
-function renderChannelsPage(data) {
-  return `
-    <div class="page-stack">
-      <article class="surface-panel">
-        ${renderPanelHeader({
-          eyebrow: 'Channel scorecards',
-          title: 'Operational posture by destination',
-          subtitle: 'Each card shows status, workload, recent movement, and the main risk to watch.'
-        })}
-        <div class="summary-grid">
-          ${(data.items || []).map(renderChannelHealthCard).join('')}
+            ? items.map((item) => grouped
+              ? renderInstagramGroupCard(item, {
+                page: 'interactions',
+                pendingAction: state.pendingAction
+              })
+              : renderInteractionCard(item, {
+                page: 'interactions',
+                pendingAction: state.pendingAction
+              })).join('')
+            : renderEmptyState('Ничего не найдено', 'Попробуйте изменить фильтры или снять часть ограничений.')}
         </div>
       </article>
     </div>
@@ -263,48 +161,84 @@ function renderChannelsPage(data) {
 function renderIntegrationsPage(data, state) {
   return `
     <div class="page-stack">
+      ${renderMetricCards([
+        {
+          label: 'Всего интеграций',
+          value: data.summary.total,
+          detail: `${data.summary.healthy} в норме`,
+          tone: 'neutral'
+        },
+        {
+          label: 'Требуют авторизации',
+          value: data.summary.reauthRequired,
+          detail: 'Нужно повторное подключение',
+          tone: data.summary.reauthRequired ? 'warning' : 'healthy'
+        },
+        {
+          label: 'Ограничено',
+          value: data.summary.degraded,
+          detail: 'Есть ошибки или устаревшие данные',
+          tone: data.summary.degraded ? 'warning' : 'healthy'
+        }
+      ])}
       <article class="surface-panel">
         ${renderPanelHeader({
-          eyebrow: 'Auth and health',
-          title: 'Integration control surface',
-          subtitle: 'Status, last check, errors, and reauthorization entry points.'
+          eyebrow: 'Контроль каналов',
+          title: 'Интеграции и ручной запуск',
+          subtitle: 'Статусы, ошибки, авторизация и запуск обработки по каждому сервису.'
         })}
         <div class="summary-grid">
-          ${(data.services || []).map((service) => renderIntegrationCard(service, {
-            page: 'integrations',
-            pendingAction: state.pendingAction
-          })).join('')}
+          ${(data.services || []).length
+            ? data.services.map((service) => renderServiceCard(service, {
+              page: 'integrations',
+              pendingAction: state.pendingAction
+            })).join('')
+            : renderEmptyState('Интеграции не найдены', 'Когда сервисы будут подключены, они появятся в этом разделе.')}
         </div>
       </article>
     </div>
   `;
 }
 
-function renderActivityPage(data) {
+function renderProfilePage(data) {
   return `
     <div class="page-stack">
       <article class="surface-panel">
         ${renderPanelHeader({
-          eyebrow: 'Audit trail',
-          title: 'Recent assistant activity',
-          subtitle: 'A simplified log of service stages, decisions, and delivery outcomes.'
+          eyebrow: 'Профиль',
+          title: 'Аккаунт и уведомления',
+          subtitle: 'MVP рассчитан на одного пользователя без ролей.'
         })}
-        <div class="stack-list">
-          ${(data.items || []).length
-            ? data.items.map(renderActivityItem).join('')
-            : renderEmptyState('No recent activity', 'Service events will appear here automatically.')}
+        <div class="detail-grid">
+          <div class="detail-stat">
+            <span class="detail-stat__label">Email</span>
+            <strong class="detail-stat__value">${data.user?.email || 'Не указан'}</strong>
+          </div>
+          <div class="detail-stat">
+            <span class="detail-stat__label">Клиника</span>
+            <strong class="detail-stat__value">${data.clinic?.name || 'INFINITY LIFE'}</strong>
+          </div>
+          <div class="detail-stat">
+            <span class="detail-stat__label">Telegram</span>
+            <strong class="detail-stat__value">${data.notifications?.telegramConfigured ? 'Подключен' : 'Не настроен'}</strong>
+          </div>
+        </div>
+        <p class="panel__subtitle">${data.notifications?.summary || ''}</p>
+        <div class="card-actions">
+          <button class="chip-button" type="button" data-send-password-reset>Отправить ссылку для смены пароля</button>
+          <button class="chip-button chip-button--ghost" type="button" data-logout>Выйти</button>
         </div>
       </article>
     </div>
   `;
 }
 
-function renderLoadingState(page) {
-  return renderEmptyState('Loading', `Collecting the latest data for ${page}.`);
+function renderLoadingState() {
+  return renderEmptyState('Загрузка', 'Собираем актуальные данные командного центра.');
 }
 
 function renderErrorState(message) {
-  return renderEmptyState('Unable to load this view', message);
+  return renderEmptyState('Не удалось загрузить раздел', message);
 }
 
 export function renderPage(state) {
@@ -317,32 +251,24 @@ export function renderPage(state) {
   }
 
   if (!data) {
-    return renderLoadingState(page);
+    return renderLoadingState();
   }
 
   if (page === 'overview') {
     return renderOverviewPage(data, state);
   }
 
-  if (page === 'incidents') {
-    return renderIncidentsPage(data, state);
-  }
-
-  if (page === 'live-feed') {
-    return renderLiveFeedPage(data, state);
-  }
-
-  if (page === 'channels') {
-    return renderChannelsPage(data, state);
+  if (page === 'interactions') {
+    return renderInteractionsPage(data, state);
   }
 
   if (page === 'integrations') {
     return renderIntegrationsPage(data, state);
   }
 
-  if (page === 'activity') {
-    return renderActivityPage(data, state);
+  if (page === 'profile') {
+    return renderProfilePage(data, state);
   }
 
-  return renderErrorState('Unknown page');
+  return renderErrorState('Неизвестный раздел');
 }

@@ -1,49 +1,18 @@
 import {
   escapeHtml,
   formatDateTime,
-  formatLatency,
   formatNumber,
   getStatusLabel,
   toneFromStatus,
   truncate
 } from '../format.mjs';
 
-function renderActionButton(action, { itemId, pendingAction } = {}) {
-  if (!action || !action.kind) {
-    return '';
-  }
-
-  if (action.kind === 'resolve') {
-    const pendingKey = `resolve:${itemId}`;
-    const isPending = pendingAction === pendingKey;
-
-    return `
-      <button class="chip-button" type="button" data-resolve-incident="${escapeHtml(itemId)}" ${isPending ? 'disabled' : ''}>
-        ${escapeHtml(isPending ? 'Resolving...' : action.label)}
-      </button>
-    `;
-  }
-
-  if (action.kind === 'reauthorize') {
-    const pendingKey = `reauthorize:${action.service}`;
-    const isPending = pendingAction === pendingKey;
-
-    return `
-      <button class="chip-button" type="button" data-integration-reauth="${escapeHtml(action.service || '')}" ${isPending ? 'disabled' : ''}>
-        ${escapeHtml(isPending ? 'Opening...' : action.label)}
-      </button>
-    `;
-  }
-
-  if (action.kind === 'open_context') {
-    return `
-      <button class="chip-button chip-button--ghost" type="button" data-open-context-page="${escapeHtml(action.page || '')}" data-open-context-id="${escapeHtml(action.itemId || '')}">
-        ${escapeHtml(action.label)}
-      </button>
-    `;
-  }
-
-  return '';
+function renderChipButton({ label, attrs = '', pending = false, ghost = false }) {
+  return `
+    <button class="chip-button ${ghost ? 'chip-button--ghost' : ''}" type="button" ${attrs} ${pending ? 'disabled' : ''}>
+      ${escapeHtml(label)}
+    </button>
+  `;
 }
 
 export function renderStatusBadge(status, label) {
@@ -100,6 +69,21 @@ export function renderFilterSelect({ page, key, value, label, options }) {
   `;
 }
 
+export function renderFilterInput({ page, key, value, label, placeholder }) {
+  return `
+    <label class="filter-control filter-control--wide">
+      <span class="filter-control__label">${escapeHtml(label)}</span>
+      <input
+        class="filter-control__input"
+        type="search"
+        value="${escapeHtml(value || '')}"
+        placeholder="${escapeHtml(placeholder || '')}"
+        data-filter-page="${escapeHtml(page)}"
+        data-filter-key="${escapeHtml(key)}">
+    </label>
+  `;
+}
+
 export function renderPanelHeader({ eyebrow, title, subtitle, meta }) {
   return `
     <header class="panel__header">
@@ -113,122 +97,166 @@ export function renderPanelHeader({ eyebrow, title, subtitle, meta }) {
   `;
 }
 
-export function renderIncidentCard(incident, context = {}) {
-  const actions = (incident.actions || [])
-    .map((action) => renderActionButton(action, {
-      itemId: incident.id,
-      pendingAction: context.pendingAction
-    }))
-    .join('');
-  const frequency = incident.count > 1 ? `${formatNumber(incident.count)}x seen` : 'Single occurrence';
-  const updatedAt = incident.updatedAt ? formatDateTime(incident.updatedAt) : 'No update time';
+export function renderBanner(banner) {
+  if (!banner) {
+    return '';
+  }
 
   return `
-    <article class="incident-card" data-open-drawer-page="${escapeHtml(context.page)}" data-open-drawer-id="${escapeHtml(incident.id)}">
-      <div class="incident-card__header">
-        <div>
-          <p class="eyebrow eyebrow--muted">${escapeHtml(incident.source)}</p>
-          <h4 class="card-title">${escapeHtml(incident.title)}</h4>
-        </div>
-        ${renderStatusBadge(incident.severity)}
-      </div>
-      <p class="card-copy">${escapeHtml(truncate(incident.detail, 220))}</p>
-      <div class="detail-grid detail-grid--compact">
-        <span>${renderStatusBadge(incident.state)}</span>
-        <span class="detail-chip">${escapeHtml(frequency)}</span>
-        <span class="detail-chip">${escapeHtml(updatedAt)}</span>
-      </div>
-      ${actions ? `<div class="card-actions">${actions}</div>` : ''}
-    </article>
+    <section class="surface-panel tone-${escapeHtml(banner.tone || 'warning')}">
+      <p class="eyebrow">Состояние системы</p>
+      <h3 class="panel__title">${escapeHtml(banner.title)}</h3>
+      <p class="panel__subtitle">${escapeHtml(banner.detail || '')}</p>
+    </section>
   `;
 }
 
-export function renderLiveFeedItem(item, context = {}) {
+export function renderInteractionCard(item, context = {}) {
+  const markPending = context.pendingAction === `attention:${item.id}`;
+  const processPending = context.pendingAction === `reprocess:${item.id}`;
+
   return `
     <article class="timeline-card" data-open-drawer-page="${escapeHtml(context.page)}" data-open-drawer-id="${escapeHtml(item.id)}">
       <div class="timeline-card__header">
         <div>
-          <p class="eyebrow eyebrow--muted">${escapeHtml(item.source || item.channel || 'Event')}</p>
+          <p class="eyebrow eyebrow--muted">${escapeHtml(item.serviceLabel || item.service)}</p>
           <h4 class="card-title">${escapeHtml(item.title)}</h4>
         </div>
-        ${renderStatusBadge(item.status)}
+        ${renderStatusBadge(item.status, item.statusLabel)}
       </div>
-      <p class="card-copy">${escapeHtml(truncate(item.text || item.detail || item.stageDetail || '', 220))}</p>
-      ${item.responseText ? `<div class="response-block">${escapeHtml(truncate(item.responseText, 220))}</div>` : ''}
+      <p class="card-copy">${escapeHtml(truncate(item.previewText || '', 220))}</p>
       <div class="detail-grid detail-grid--compact">
-        ${item.decision ? `<span class="detail-chip">${escapeHtml(getStatusLabel(item.decision))}</span>` : ''}
-        <span class="detail-chip">${escapeHtml(formatLatency(item.latencySeconds))}</span>
-        <span class="detail-chip">${escapeHtml(formatDateTime(item.updatedAt || item.timestamp))}</span>
+        ${item.contactLabel ? `<span class="detail-chip">${escapeHtml(item.contactLabel)}</span>` : ''}
+        ${item.slaState ? `<span class="detail-chip">${escapeHtml(getStatusLabel(item.slaState))}</span>` : ''}
+        <span class="detail-chip">${escapeHtml(formatDateTime(item.updatedAt || item.receivedAt))}</span>
+      </div>
+      <div class="card-actions">
+        ${renderChipButton({
+          label: markPending ? 'Сохраняем...' : 'Требует внимания',
+          attrs: `data-mark-attention="${escapeHtml(item.id)}"`,
+          pending: markPending
+        })}
+        ${renderChipButton({
+          label: processPending ? 'Перезапуск...' : 'Повторить обработку',
+          attrs: `data-reprocess-interaction="${escapeHtml(item.id)}"`,
+          pending: processPending,
+          ghost: true
+        })}
       </div>
     </article>
   `;
 }
 
-export function renderChannelHealthCard(channel) {
+export function renderInstagramGroupCard(group, context = {}) {
+  const dmValue = String(group.automation?.dmEnabled !== false);
+  const commentValue = String(group.automation?.commentEnabled !== false);
+  const dmPending = context.pendingAction === `automation:${group.contactId}:dmEnabled`;
+  const commentPending = context.pendingAction === `automation:${group.contactId}:commentEnabled`;
+
   return `
-    <article class="summary-card" data-open-drawer-page="channels" data-open-drawer-id="${escapeHtml(channel.id)}">
+    <article class="summary-card" data-open-drawer-page="${escapeHtml(context.page)}" data-open-drawer-id="${escapeHtml(group.id)}">
       <div class="summary-card__header">
-        <h4 class="card-title">${escapeHtml(channel.name)}</h4>
-        ${renderStatusBadge(channel.status)}
+        <div>
+          <p class="eyebrow eyebrow--muted">Instagram DM</p>
+          <h4 class="card-title">${escapeHtml(group.contactLabel)}</h4>
+        </div>
+        ${renderStatusBadge(group.status, group.statusLabel)}
       </div>
-      <p class="card-copy">${escapeHtml(channel.topRisk || channel.summary || '')}</p>
+      <p class="card-copy">${escapeHtml(truncate(group.previewText || '', 180))}</p>
+      <div class="detail-grid detail-grid--compact">
+        <span class="detail-chip">${escapeHtml(`Сообщений: ${formatNumber(group.totalInteractions)}`)}</span>
+        <span class="detail-chip">${escapeHtml(`В работе: ${formatNumber(group.pendingCount)}`)}</span>
+        <span class="detail-chip">${escapeHtml(formatDateTime(group.lastMessageAt))}</span>
+      </div>
+      <div class="card-actions">
+        ${renderChipButton({
+          label: dmPending ? 'Сохраняем...' : `ИИ для сообщений: ${group.automation?.dmEnabled === false ? 'Off' : 'On'}`,
+          attrs: `data-contact-automation="${escapeHtml(group.contactId)}" data-automation-key="dmEnabled" data-automation-value="${escapeHtml(dmValue)}"`,
+          pending: dmPending
+        })}
+        ${renderChipButton({
+          label: commentPending ? 'Сохраняем...' : `ИИ для комментариев: ${group.automation?.commentEnabled === false ? 'Off' : 'On'}`,
+          attrs: `data-contact-automation="${escapeHtml(group.contactId)}" data-automation-key="commentEnabled" data-automation-value="${escapeHtml(commentValue)}"`,
+          pending: commentPending,
+          ghost: true
+        })}
+      </div>
+    </article>
+  `;
+}
+
+export function renderServiceCard(service, context = {}) {
+  const processPending = context.pendingAction === `service:${service.id}:process-pending`;
+  const checkPending = context.pendingAction === `service:${service.id}:check-health`;
+  const reauthPending = context.pendingAction === `service:${service.id}:reauthorize`;
+
+  return `
+    <article class="summary-card" data-open-drawer-page="${escapeHtml(context.page)}" data-open-drawer-id="${escapeHtml(service.id)}">
+      <div class="summary-card__header">
+        <div>
+          <p class="eyebrow eyebrow--muted">${escapeHtml(service.provider || 'Интеграция')}</p>
+          <h4 class="card-title">${escapeHtml(service.name)}</h4>
+        </div>
+        ${renderStatusBadge(service.status)}
+      </div>
+      <p class="card-copy">${escapeHtml(service.summary || '')}</p>
       <div class="detail-grid">
-        ${(channel.metrics || []).map((metric) => `
+        ${(service.metrics || []).map((metric) => `
           <div class="detail-stat">
             <span class="detail-stat__label">${escapeHtml(metric.label)}</span>
             <strong class="detail-stat__value">${escapeHtml(formatNumber(metric.value))}</strong>
           </div>
         `).join('')}
       </div>
-    </article>
-  `;
-}
-
-export function renderIntegrationCard(service, context = {}) {
-  const actionButtons = (service.actions || [])
-    .filter((action) => action === 'reauthorize')
-    .map(() => renderActionButton({
-      kind: 'reauthorize',
-      label: 'Reauthorize',
-      service: service.id
-    }, {
-      itemId: service.id,
-      pendingAction: context.pendingAction
-    }))
-    .join('');
-
-  return `
-    <article class="summary-card" data-open-drawer-page="${escapeHtml(context.page || 'integrations')}" data-open-drawer-id="${escapeHtml(service.id)}">
-      <div class="summary-card__header">
-        <div>
-          <p class="eyebrow eyebrow--muted">${escapeHtml(service.provider || 'Integration')}</p>
-          <h4 class="card-title">${escapeHtml(service.name)}</h4>
-        </div>
-        ${renderStatusBadge(service.status)}
-      </div>
-      <p class="card-copy">${escapeHtml(service.summary || '')}</p>
       <div class="detail-grid detail-grid--compact">
-        <span class="detail-chip">${escapeHtml(formatDateTime(service.lastCheckedAt))}</span>
+        <span class="detail-chip">${escapeHtml(`Последняя проверка: ${formatDateTime(service.lastCheckedAt)}`)}</span>
         ${service.lastError ? `<span class="detail-chip tone-critical">${escapeHtml(truncate(service.lastError, 120))}</span>` : ''}
       </div>
-      ${actionButtons ? `<div class="card-actions">${actionButtons}</div>` : ''}
+      <div class="card-actions">
+        ${renderChipButton({
+          label: processPending ? 'Запуск...' : 'Запустить обработку',
+          attrs: `data-service-action="process-pending" data-service-id="${escapeHtml(service.id)}"`,
+          pending: processPending
+        })}
+        ${renderChipButton({
+          label: checkPending ? 'Проверяем...' : 'Проверить подключение',
+          attrs: `data-service-action="check-health" data-service-id="${escapeHtml(service.id)}"`,
+          pending: checkPending,
+          ghost: true
+        })}
+        ${service.status === 'reauth_required' ? renderChipButton({
+          label: reauthPending ? 'Открываем...' : 'Авторизоваться',
+          attrs: `data-service-action="reauthorize" data-service-id="${escapeHtml(service.id)}"`,
+          pending: reauthPending,
+          ghost: true
+        }) : ''}
+        ${renderChipButton({
+          label: 'Перейти в лог',
+          attrs: `data-open-service-log="${escapeHtml(service.id)}"`,
+          ghost: true
+        })}
+      </div>
     </article>
   `;
 }
 
-export function renderActivityItem(item) {
+function renderTimeline(timeline = []) {
+  if (!timeline.length) {
+    return `<p class="drawer__text">История обработки пока не записана.</p>`;
+  }
+
   return `
-    <article class="activity-row">
-      <div class="activity-row__header">
-        <div>
-          <p class="eyebrow eyebrow--muted">${escapeHtml(item.source || 'Activity')}</p>
-          <h4 class="card-title">${escapeHtml(item.title)}</h4>
+    <div class="timeline-list">
+      ${timeline.map((stage) => `
+        <div class="timeline-list__item">
+          <div>
+            <h4 class="drawer-section__title">${escapeHtml(stage.label)}</h4>
+            <p class="drawer__text">${escapeHtml(stage.detail || '')}</p>
+          </div>
+          <span class="detail-chip">${escapeHtml(formatDateTime(stage.at))}</span>
         </div>
-        ${renderStatusBadge(item.status)}
-      </div>
-      <p class="card-copy">${escapeHtml(truncate(item.detail || '', 220))}</p>
-      <span class="detail-chip">${escapeHtml(formatDateTime(item.timestamp))}</span>
-    </article>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -237,100 +265,146 @@ export function renderDrawer(drawerModel, pendingAction) {
     return '';
   }
 
-  if (drawerModel.kind === 'incident') {
-    const incident = drawerModel.item;
-    const actions = (incident.actions || [])
-      .map((action) => renderActionButton(action, {
-        itemId: incident.id,
-        pendingAction
-      }))
-      .join('');
-
-    return `
-      <aside class="drawer drawer--open" aria-label="Details drawer">
-        <div class="drawer__backdrop" data-close-drawer></div>
-        <div class="drawer__panel">
-          <button class="drawer__close" type="button" data-close-drawer aria-label="Close details">Close</button>
-          <p class="eyebrow">Incident</p>
-          <h3 class="drawer__title">${escapeHtml(incident.title)}</h3>
-          <p class="drawer__text">${escapeHtml(incident.detail)}</p>
-          <div class="detail-grid">
-            <div class="detail-stat">
-              <span class="detail-stat__label">Severity</span>
-              <strong class="detail-stat__value">${escapeHtml(getStatusLabel(incident.severity))}</strong>
-            </div>
-            <div class="detail-stat">
-              <span class="detail-stat__label">State</span>
-              <strong class="detail-stat__value">${escapeHtml(getStatusLabel(incident.state))}</strong>
-            </div>
-            <div class="detail-stat">
-              <span class="detail-stat__label">Service</span>
-              <strong class="detail-stat__value">${escapeHtml(incident.service || 'n/a')}</strong>
-            </div>
-            <div class="detail-stat">
-              <span class="detail-stat__label">Reason code</span>
-              <strong class="detail-stat__value">${escapeHtml(incident.reasonCode || 'n/a')}</strong>
-            </div>
-            <div class="detail-stat">
-              <span class="detail-stat__label">Opened</span>
-              <strong class="detail-stat__value">${escapeHtml(formatDateTime(incident.openedAt))}</strong>
-            </div>
-            <div class="detail-stat">
-              <span class="detail-stat__label">Updated</span>
-              <strong class="detail-stat__value">${escapeHtml(formatDateTime(incident.updatedAt))}</strong>
-            </div>
-          </div>
-          <div class="detail-meta">
-            <pre class="detail-meta__code">${escapeHtml(JSON.stringify(incident.meta || {}, null, 2))}</pre>
-          </div>
-          ${actions ? `<div class="card-actions">${actions}</div>` : ''}
-        </div>
-      </aside>
-    `;
-  }
-
-  if (drawerModel.kind === 'live-feed') {
+  if (drawerModel.kind === 'interaction') {
     const item = drawerModel.item;
+    const markPending = pendingAction === `attention:${item.id}`;
+    const processPending = pendingAction === `reprocess:${item.id}`;
 
     return `
-      <aside class="drawer drawer--open" aria-label="Details drawer">
+      <aside class="drawer drawer--open" aria-label="Детали обращения">
         <div class="drawer__backdrop" data-close-drawer></div>
         <div class="drawer__panel">
-          <button class="drawer__close" type="button" data-close-drawer aria-label="Close details">Close</button>
-          <p class="eyebrow">Live decision</p>
+          <button class="drawer__close" type="button" data-close-drawer aria-label="Закрыть">Закрыть</button>
+          <p class="eyebrow">${escapeHtml(item.serviceLabel || item.service)}</p>
           <h3 class="drawer__title">${escapeHtml(item.title)}</h3>
           <div class="detail-grid detail-grid--compact">
-            ${item.channel ? `<span class="detail-chip">${escapeHtml(item.channel)}</span>` : ''}
-            ${item.decision ? `<span class="detail-chip">${escapeHtml(getStatusLabel(item.decision))}</span>` : ''}
-            <span class="detail-chip">${escapeHtml(formatLatency(item.latencySeconds))}</span>
-            <span class="detail-chip">${escapeHtml(formatDateTime(item.updatedAt || item.timestamp))}</span>
+            ${renderStatusBadge(item.status, item.statusLabel)}
+            ${item.contactLabel ? `<span class="detail-chip">${escapeHtml(item.contactLabel)}</span>` : ''}
+            <span class="detail-chip">${escapeHtml(formatDateTime(item.updatedAt || item.receivedAt))}</span>
           </div>
           <div class="drawer-section">
-            <h4 class="drawer-section__title">Incoming text</h4>
-            <p class="drawer__text">${escapeHtml(item.text || 'No text')}</p>
+            <h4 class="drawer-section__title">Текст обращения</h4>
+            <p class="drawer__text">${escapeHtml(item.previewText || 'Нет текста')}</p>
           </div>
+          ${item.responseText ? `
+            <div class="drawer-section">
+              <h4 class="drawer-section__title">Ответ</h4>
+              <p class="drawer__text">${escapeHtml(item.responseText)}</p>
+            </div>
+          ` : ''}
           <div class="drawer-section">
-            <h4 class="drawer-section__title">Response</h4>
-            <p class="drawer__text">${escapeHtml(item.responseText || 'No response captured')}</p>
+            <h4 class="drawer-section__title">История обработки</h4>
+            ${renderTimeline(item.timeline || [])}
+          </div>
+          <div class="card-actions">
+            ${renderChipButton({
+              label: markPending ? 'Сохраняем...' : 'Требует внимания',
+              attrs: `data-mark-attention="${escapeHtml(item.id)}"`,
+              pending: markPending
+            })}
+            ${renderChipButton({
+              label: processPending ? 'Перезапуск...' : 'Повторить обработку',
+              attrs: `data-reprocess-interaction="${escapeHtml(item.id)}"`,
+              pending: processPending,
+              ghost: true
+            })}
+            ${item.sourceUrl ? `<a class="chip-button chip-button--ghost" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener">Открыть источник</a>` : ''}
           </div>
         </div>
       </aside>
     `;
   }
 
-  const item = drawerModel.item;
-  const title = item?.name || item?.title || 'Details';
-  const summary = item?.summary || item?.detail || item?.topRisk || '';
+  if (drawerModel.kind === 'contact-group') {
+    const item = drawerModel.item;
+    const dmPending = pendingAction === `automation:${item.contactId}:dmEnabled`;
+    const commentPending = pendingAction === `automation:${item.contactId}:commentEnabled`;
 
-  return `
-    <aside class="drawer drawer--open" aria-label="Details drawer">
-      <div class="drawer__backdrop" data-close-drawer></div>
-      <div class="drawer__panel">
-        <button class="drawer__close" type="button" data-close-drawer aria-label="Close details">Close</button>
-        <p class="eyebrow">${escapeHtml(drawerModel.kind)}</p>
-        <h3 class="drawer__title">${escapeHtml(title)}</h3>
-        <p class="drawer__text">${escapeHtml(summary)}</p>
-      </div>
-    </aside>
-  `;
+    return `
+      <aside class="drawer drawer--open" aria-label="Детали контакта">
+        <div class="drawer__backdrop" data-close-drawer></div>
+        <div class="drawer__panel">
+          <button class="drawer__close" type="button" data-close-drawer aria-label="Закрыть">Закрыть</button>
+          <p class="eyebrow">Instagram контакт</p>
+          <h3 class="drawer__title">${escapeHtml(item.contactLabel)}</h3>
+          <p class="drawer__text">${escapeHtml(item.previewText || '')}</p>
+          <div class="detail-grid">
+            <div class="detail-stat">
+              <span class="detail-stat__label">Сообщений</span>
+              <strong class="detail-stat__value">${escapeHtml(formatNumber(item.totalInteractions))}</strong>
+            </div>
+            <div class="detail-stat">
+              <span class="detail-stat__label">В работе</span>
+              <strong class="detail-stat__value">${escapeHtml(formatNumber(item.pendingCount))}</strong>
+            </div>
+          </div>
+          <div class="card-actions">
+            ${renderChipButton({
+              label: dmPending ? 'Сохраняем...' : `ИИ для сообщений: ${item.automation?.dmEnabled === false ? 'Off' : 'On'}`,
+              attrs: `data-contact-automation="${escapeHtml(item.contactId)}" data-automation-key="dmEnabled" data-automation-value="${escapeHtml(String(item.automation?.dmEnabled !== false))}"`,
+              pending: dmPending
+            })}
+            ${renderChipButton({
+              label: commentPending ? 'Сохраняем...' : `ИИ для комментариев: ${item.automation?.commentEnabled === false ? 'Off' : 'On'}`,
+              attrs: `data-contact-automation="${escapeHtml(item.contactId)}" data-automation-key="commentEnabled" data-automation-value="${escapeHtml(String(item.automation?.commentEnabled !== false))}"`,
+              pending: commentPending,
+              ghost: true
+            })}
+          </div>
+        </div>
+      </aside>
+    `;
+  }
+
+  if (drawerModel.kind === 'service') {
+    const item = drawerModel.item;
+    const processPending = pendingAction === `service:${item.id}:process-pending`;
+    const checkPending = pendingAction === `service:${item.id}:check-health`;
+    const reauthPending = pendingAction === `service:${item.id}:reauthorize`;
+
+    return `
+      <aside class="drawer drawer--open" aria-label="Детали интеграции">
+        <div class="drawer__backdrop" data-close-drawer></div>
+        <div class="drawer__panel">
+          <button class="drawer__close" type="button" data-close-drawer aria-label="Закрыть">Закрыть</button>
+          <p class="eyebrow">${escapeHtml(item.provider || 'Интеграция')}</p>
+          <h3 class="drawer__title">${escapeHtml(item.name)}</h3>
+          <p class="drawer__text">${escapeHtml(item.summary || '')}</p>
+          <div class="detail-grid">
+            ${(item.metrics || []).map((metric) => `
+              <div class="detail-stat">
+                <span class="detail-stat__label">${escapeHtml(metric.label)}</span>
+                <strong class="detail-stat__value">${escapeHtml(formatNumber(metric.value))}</strong>
+              </div>
+            `).join('')}
+          </div>
+          <div class="detail-grid detail-grid--compact">
+            <span class="detail-chip">${escapeHtml(formatDateTime(item.lastCheckedAt))}</span>
+            ${item.lastError ? `<span class="detail-chip tone-critical">${escapeHtml(item.lastError)}</span>` : ''}
+          </div>
+          <div class="card-actions">
+            ${renderChipButton({
+              label: processPending ? 'Запуск...' : 'Запустить обработку',
+              attrs: `data-service-action="process-pending" data-service-id="${escapeHtml(item.id)}"`,
+              pending: processPending
+            })}
+            ${renderChipButton({
+              label: checkPending ? 'Проверяем...' : 'Проверить подключение',
+              attrs: `data-service-action="check-health" data-service-id="${escapeHtml(item.id)}"`,
+              pending: checkPending,
+              ghost: true
+            })}
+            ${item.status === 'reauth_required' ? renderChipButton({
+              label: reauthPending ? 'Открываем...' : 'Авторизоваться',
+              attrs: `data-service-action="reauthorize" data-service-id="${escapeHtml(item.id)}"`,
+              pending: reauthPending,
+              ghost: true
+            }) : ''}
+          </div>
+        </div>
+      </aside>
+    `;
+  }
+
+  return '';
 }

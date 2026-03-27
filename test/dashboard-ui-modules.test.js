@@ -24,14 +24,14 @@ test('dashboard state reducer tracks page loading, drawer state, and immutable f
     });
     const filtered = reduceState(loaded, {
         type: 'SET_FILTER',
-        page: 'incidents',
-        key: 'severity',
-        value: 'critical'
+        page: 'interactions',
+        key: 'status',
+        value: 'needs_attention'
     });
     const withDrawer = reduceState(filtered, {
         type: 'OPEN_DRAWER',
-        page: 'incidents',
-        itemId: 'inc_1'
+        page: 'interactions',
+        itemId: 'evt_1'
     });
     const withoutDrawer = reduceState(withDrawer, {
         type: 'CLOSE_DRAWER'
@@ -41,10 +41,10 @@ test('dashboard state reducer tracks page loading, drawer state, and immutable f
     assert.equal(loading.loadingPage, 'overview');
     assert.equal(loaded.pages.overview.generatedAt, '2026-03-27T09:00:00.000Z');
     assert.equal(loaded.lastSync, '2026-03-27T09:00:00.000Z');
-    assert.equal(filtered.filtersByPage.incidents.severity, 'critical');
-    assert.equal(initial.filtersByPage.incidents.severity, 'all');
+    assert.equal(filtered.filtersByPage.interactions.status, 'needs_attention');
+    assert.equal(initial.filtersByPage.interactions.status, 'all');
     assert.equal(withDrawer.drawer.open, true);
-    assert.equal(withDrawer.drawer.itemId, 'inc_1');
+    assert.equal(withDrawer.drawer.itemId, 'evt_1');
     assert.equal(withoutDrawer.drawer.open, false);
 });
 
@@ -83,54 +83,52 @@ test('drawer model resolves incident and live-feed details from page payloads', 
 
     const pages = {
         overview: {
-            triage: {
-                items: [
-                    {
-                        id: 'inc_1',
-                        title: 'Risky DM requires operator review',
-                        detail: 'Patient complaint',
-                        actions: [{ kind: 'resolve', label: 'Resolve incident', service: null, page: null, itemId: null }]
-                    }
-                ]
-            },
-            liveFeed: {
+            urgent: {
                 items: [
                     {
                         id: 'evt_1',
-                        title: 'DM @aliya',
-                        text: 'Мне стало хуже',
-                        responseText: 'Передали оператору'
+                        service: 'instagram_dm',
+                        serviceLabel: 'Сообщения Instagram',
+                        status: 'new',
+                        statusLabel: 'Новое',
+                        title: 'Диалог с aliyas',
+                        previewText: 'Мне стало хуже'
                     }
                 ]
             }
         },
-        incidents: {
-            items: [
+        interactions: {
+            data: [
                 {
-                    id: 'inc_1',
-                    title: 'Risky DM requires operator review',
-                    detail: 'Patient complaint',
-                    actions: [{ kind: 'resolve', label: 'Resolve incident', service: null, page: null, itemId: null }]
+                    id: 'evt_1',
+                    service: 'instagram_dm',
+                    serviceLabel: 'Сообщения Instagram',
+                    status: 'new',
+                    statusLabel: 'Новое',
+                    title: 'Диалог с aliyas',
+                    previewText: 'Мне стало хуже'
                 }
             ]
         },
-        'live-feed': {
-            items: [
+        integrations: {
+            services: [
                 {
-                    id: 'evt_1',
-                    title: 'DM @aliya',
-                    text: 'Мне стало хуже',
-                    responseText: 'Передали оператору'
+                    id: 'instagram',
+                    name: 'Instagram',
+                    status: 'healthy'
                 }
             ]
         }
     };
 
-    const incidentDrawer = buildDrawerModel(pages, { page: 'incidents', itemId: 'inc_1' });
-    const feedDrawer = buildDrawerModel(pages, { page: 'live-feed', itemId: 'evt_1' });
+    const overviewDrawer = buildDrawerModel(pages, { page: 'overview', itemId: 'evt_1' });
+    const interactionDrawer = buildDrawerModel(pages, { page: 'interactions', itemId: 'evt_1' });
+    const integrationDrawer = buildDrawerModel(pages, { page: 'integrations', itemId: 'instagram' });
 
-    assert.equal(incidentDrawer.kind, 'incident');
-    assert.equal(incidentDrawer.item.id, 'inc_1');
-    assert.equal(feedDrawer.kind, 'live-feed');
-    assert.equal(feedDrawer.item.id, 'evt_1');
+    assert.equal(overviewDrawer.kind, 'interaction');
+    assert.equal(overviewDrawer.item.id, 'evt_1');
+    assert.equal(interactionDrawer.kind, 'interaction');
+    assert.equal(interactionDrawer.item.id, 'evt_1');
+    assert.equal(integrationDrawer.kind, 'service');
+    assert.equal(integrationDrawer.item.id, 'instagram');
 });

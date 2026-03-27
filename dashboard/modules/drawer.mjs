@@ -10,6 +10,10 @@ function buildModel(kind, item, page) {
   };
 }
 
+function findItem(items, itemId) {
+  return (items || []).find((item) => item.id === itemId) || null;
+}
+
 export function buildDrawerModel(pages, drawer) {
   if (!drawer || !drawer.page || !drawer.itemId) {
     return null;
@@ -21,57 +25,36 @@ export function buildDrawerModel(pages, drawer) {
       return null;
     }
 
-    const incident = overview.triage?.items?.find((item) => item.id === drawer.itemId);
-    if (incident) {
-      return buildModel('incident', incident, 'overview');
+    const urgent = findItem(overview.urgent?.items, drawer.itemId);
+    if (urgent) {
+      return buildModel('interaction', urgent, 'overview');
     }
 
-    const feedItem = overview.liveFeed?.items?.find((item) => item.id === drawer.itemId);
-    if (feedItem) {
-      return buildModel('live-feed', feedItem, 'overview');
-    }
-
-    const integration = overview.integrationHealth?.items?.find((item) => item.id === drawer.itemId);
-    if (integration) {
-      return buildModel('integration', integration, 'overview');
-    }
-
-    const channel = overview.channelHealth?.items?.find((item) => item.id === drawer.itemId);
-    if (channel) {
-      return buildModel('channel', channel, 'overview');
+    const service = findItem(overview.services?.items, drawer.itemId);
+    if (service) {
+      return buildModel('service', service, 'overview');
     }
 
     return null;
   }
 
-  if (drawer.page === 'incidents') {
-    return buildModel(
-      'incident',
-      pages.incidents?.items?.find((item) => item.id === drawer.itemId),
-      drawer.page
-    );
-  }
+  if (drawer.page === 'interactions') {
+    const item = findItem(pages.interactions?.data, drawer.itemId);
+    if (!item) {
+      return null;
+    }
 
-  if (drawer.page === 'live-feed') {
-    return buildModel(
-      'live-feed',
-      pages['live-feed']?.items?.find((item) => item.id === drawer.itemId),
-      drawer.page
-    );
+    if (item.totalInteractions) {
+      return buildModel('contact-group', item, drawer.page);
+    }
+
+    return buildModel('interaction', item, drawer.page);
   }
 
   if (drawer.page === 'integrations') {
     return buildModel(
-      'integration',
-      pages.integrations?.services?.find((item) => item.id === drawer.itemId),
-      drawer.page
-    );
-  }
-
-  if (drawer.page === 'channels') {
-    return buildModel(
-      'channel',
-      pages.channels?.items?.find((item) => item.id === drawer.itemId),
+      'service',
+      findItem(pages.integrations?.services, drawer.itemId),
       drawer.page
     );
   }

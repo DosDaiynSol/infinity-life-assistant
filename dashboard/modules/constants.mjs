@@ -1,58 +1,36 @@
 export const PAGE_CONFIG = Object.freeze([
   {
     id: 'overview',
-    label: 'Command Center',
-    hint: 'Executive summary and triage board'
+    label: 'Главная',
+    hint: 'Сводка и срочные обращения'
   },
   {
-    id: 'incidents',
-    label: 'Incidents',
-    hint: 'Critical, warning, and resolved operator cases'
-  },
-  {
-    id: 'live-feed',
-    label: 'Live Feed',
-    hint: 'Realtime decisions, responses, and latency'
-  },
-  {
-    id: 'channels',
-    label: 'Channels',
-    hint: 'Operational scorecards by channel'
+    id: 'interactions',
+    label: 'Лог обращений',
+    hint: 'Все каналы и фильтры'
   },
   {
     id: 'integrations',
-    label: 'Integrations',
-    hint: 'Tokens, auth posture, and service health'
+    label: 'Интеграции',
+    hint: 'Статусы, авторизация, запуск'
   },
   {
-    id: 'activity',
-    label: 'Activity',
-    hint: 'Audit trail across the assistant'
+    id: 'profile',
+    label: 'Профиль',
+    hint: 'Аккаунт и уведомления'
   }
 ]);
 
 export const PAGE_IDS = PAGE_CONFIG.map((page) => page.id);
 
 export const DEFAULT_FILTERS = Object.freeze({
-  incidents: Object.freeze({
-    severity: 'all',
-    source: 'all',
-    state: 'all',
-    sort: 'urgency'
-  }),
-  'live-feed': Object.freeze({
-    channel: 'all',
-    decision: 'all',
-    status: 'all'
-  }),
-  channels: Object.freeze({
-    status: 'all'
-  }),
-  integrations: Object.freeze({
-    status: 'all'
-  }),
-  activity: Object.freeze({
-    status: 'all'
+  interactions: Object.freeze({
+    service: 'all',
+    status: 'all',
+    query: '',
+    onlyUnprocessed: 'false',
+    sla: 'all',
+    view: 'list'
   })
 });
 

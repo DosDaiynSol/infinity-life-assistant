@@ -1,17 +1,33 @@
-import { reauthorizeService, resolveIncident, loadPageData } from './modules/api.mjs';
-import { buildDrawerModel } from './modules/drawer.mjs';
+import {
+  getSession,
+  loadPageData,
+  logout,
+  markInteractionAttention,
+  reprocessInteraction,
+  runServiceAction,
+  sendPasswordResetEmail,
+  updateInstagramAutomation
+} from './modules/api.mjs';
 import { renderApp } from './modules/render/shell.mjs';
 import { createStore } from './modules/state.mjs';
-
-const AUTO_REFRESH_MS = 60_000;
+import { loadSavedFilters, saveFilters } from './modules/storage.mjs';
 
 const store = createStore();
 
 let toastTimer = null;
-let autoRefreshTimer = null;
+let authBootstrapPromise = null;
 
 function getRoot() {
   return document.querySelector('[data-app-root]');
+}
+
+function getPageFromLocation() {
+  const match = window.location.hash.match(/^#\/([^/]+)/);
+  return match?.[1] || 'overview';
+}
+
+function setLocationPage(page) {
+  window.history.replaceState(null, '', `#/${page}`);
 }
 
 function render() {
@@ -43,6 +59,40 @@ function setToast(message, tone = 'neutral') {
   }
 }
 
+async function bootstrapAuth() {
+  if (authBootstrapPromise) {
+    return authBootstrapPromise;
+  }
+
+  authBootstrapPromise = getSession()
+    .then((payload) => {
+      const user = payload.data?.user || null;
+      const csrfToken = payload.data?.csrfToken || null;
+
+      store.dispatch({
+        type: 'AUTH_SUCCESS',
+        user,
+        csrfToken
+      });
+
+      const savedFilters = loadSavedFilters(user?.email);
+      if (savedFilters) {
+        store.dispatch({
+          type: 'HYDRATE_FILTERS',
+          filtersByPage: savedFilters
+        });
+      }
+    })
+    .catch(() => {
+      store.dispatch({
+        type: 'AUTH_FAILURE'
+      });
+      window.location.replace('/login');
+    });
+
+  return authBootstrapPromise;
+}
+
 async function loadPage(page = store.getState().activePage, options = {}) {
   const { background = false } = options;
 
@@ -54,7 +104,8 @@ async function loadPage(page = store.getState().activePage, options = {}) {
   }
 
   try {
-    const payload = await loadPageData(page);
+    const filters = store.getState().filtersByPage[page] || {};
+    const payload = await loadPageData(page, filters);
 
     store.dispatch({
       type: 'LOAD_PAGE_SUCCESS',
@@ -62,16 +113,6 @@ async function loadPage(page = store.getState().activePage, options = {}) {
       payload,
       receivedAt: payload.generatedAt || new Date().toISOString()
     });
-
-    const currentState = store.getState();
-    if (currentState.drawer.open && currentState.drawer.page === page) {
-      const drawerModel = buildDrawerModel(currentState.pages, currentState.drawer);
-      if (!drawerModel) {
-        store.dispatch({
-          type: 'CLOSE_DRAWER'
-        });
-      }
-    }
   } catch (error) {
     store.dispatch({
       type: 'LOAD_PAGE_ERROR',
@@ -80,9 +121,14 @@ async function loadPage(page = store.getState().activePage, options = {}) {
     });
 
     if (!background) {
-      setToast(error.message || 'Unable to load the page.', 'critical');
+      setToast(error.message || 'Не удалось загрузить раздел', 'critical');
     }
   }
+}
+
+function persistFilters() {
+  const state = store.getState();
+  saveFilters(state.appUser?.email, state.filtersByPage);
 }
 
 function navigate(page) {
@@ -90,43 +136,30 @@ function navigate(page) {
     type: 'NAVIGATE',
     page
   });
-
-  if (!store.getState().pages[page]) {
-    void loadPage(page);
-  }
+  setLocationPage(page);
+  void loadPage(page);
 }
 
-async function refreshLinkedPages(pageIds) {
+async function refreshPages(pageIds) {
   const uniquePages = [...new Set(pageIds)].filter(Boolean);
-
   await Promise.all(uniquePages.map((page) => loadPage(page, {
     background: page !== store.getState().activePage
   })));
 }
 
-async function handleResolveIncident(incidentId) {
-  const pendingKey = `resolve:${incidentId}`;
-
+async function handleInteractionAttention(interactionId) {
+  const pendingKey = `attention:${interactionId}`;
   store.dispatch({
     type: 'SET_PENDING_ACTION',
     value: pendingKey
   });
 
   try {
-    await resolveIncident(incidentId);
-    store.dispatch({
-      type: 'CLOSE_DRAWER'
-    });
-    setToast('Incident resolved.', 'healthy');
-
-    const currentState = store.getState();
-    await refreshLinkedPages([
-      'overview',
-      'incidents',
-      currentState.activePage
-    ]);
+    await markInteractionAttention(interactionId, store.getState().csrfToken);
+    setToast('Обращение помечено как требующее внимания', 'warning');
+    await refreshPages(['overview', 'interactions']);
   } catch (error) {
-    setToast(error.message || 'Unable to resolve incident.', 'critical');
+    setToast(error.message || 'Не удалось обновить статус', 'critical');
   } finally {
     store.dispatch({
       type: 'SET_PENDING_ACTION',
@@ -135,31 +168,44 @@ async function handleResolveIncident(incidentId) {
   }
 }
 
-async function handleReauthorize(service) {
-  const pendingKey = `reauthorize:${service}`;
-
+async function handleInteractionReprocess(interactionId) {
+  const pendingKey = `reprocess:${interactionId}`;
   store.dispatch({
     type: 'SET_PENDING_ACTION',
     value: pendingKey
   });
 
   try {
-    const result = await reauthorizeService(service);
-    if (result.url) {
+    const payload = await reprocessInteraction(interactionId, store.getState().csrfToken);
+    setToast(payload.data?.message || 'Повторная обработка запущена', 'healthy');
+    await refreshPages(['overview', 'interactions', 'integrations']);
+  } catch (error) {
+    setToast(error.message || 'Не удалось запустить обработку', 'critical');
+  } finally {
+    store.dispatch({
+      type: 'SET_PENDING_ACTION',
+      value: null
+    });
+  }
+}
+
+async function handleServiceAction(serviceId, action) {
+  const pendingKey = `service:${serviceId}:${action}`;
+  store.dispatch({
+    type: 'SET_PENDING_ACTION',
+    value: pendingKey
+  });
+
+  try {
+    const payload = await runServiceAction(serviceId, action, store.getState().csrfToken);
+    const result = payload.data || {};
+    if (action === 'reauthorize' && result.url) {
       window.open(result.url, '_blank', 'noopener');
     }
-
-    setToast(result.message || 'Reauthorization flow opened.', result.status === 'ok' ? 'healthy' : 'warning');
-
-    const currentState = store.getState();
-    await refreshLinkedPages([
-      'overview',
-      'incidents',
-      'integrations',
-      currentState.activePage
-    ]);
+    setToast(result.message || 'Действие выполнено', result.status === 'ok' ? 'healthy' : 'warning');
+    await refreshPages(['overview', 'integrations', 'interactions']);
   } catch (error) {
-    setToast(error.message || 'Unable to open reauthorization.', 'critical');
+    setToast(error.message || 'Не удалось выполнить действие', 'critical');
   } finally {
     store.dispatch({
       type: 'SET_PENDING_ACTION',
@@ -168,35 +214,53 @@ async function handleReauthorize(service) {
   }
 }
 
-async function handleOpenContext(page, itemId) {
-  if (!page || !itemId) {
-    return;
-  }
+async function handleContactAutomation(contactId, key, currentValue) {
+  const pendingKey = `automation:${contactId}:${key}`;
+  store.dispatch({
+    type: 'SET_PENDING_ACTION',
+    value: pendingKey
+  });
 
-  if (store.getState().activePage !== page) {
+  try {
+    const nextValue = currentValue !== 'true';
+    await updateInstagramAutomation(contactId, {
+      [key]: nextValue
+    }, store.getState().csrfToken);
+    setToast('Настройки ИИ обновлены', 'healthy');
+    await refreshPages(['overview', 'interactions']);
+  } catch (error) {
+    setToast(error.message || 'Не удалось сохранить настройки ИИ', 'critical');
+  } finally {
     store.dispatch({
-      type: 'NAVIGATE',
-      page
+      type: 'SET_PENDING_ACTION',
+      value: null
     });
   }
+}
 
-  if (!store.getState().pages[page]) {
-    await loadPage(page);
+async function handleLogout() {
+  try {
+    await logout(store.getState().csrfToken);
+  } catch (error) {
+    // Ignore logout transport issues and redirect anyway.
   }
 
-  store.dispatch({
-    type: 'OPEN_DRAWER',
-    page,
-    itemId
-  });
+  window.location.replace('/login');
+}
+
+async function handlePasswordReset() {
+  try {
+    await sendPasswordResetEmail(store.getState().appUser?.email || '');
+    setToast('Ссылка для смены пароля отправлена на email', 'healthy');
+  } catch (error) {
+    setToast(error.message || 'Не удалось отправить письмо', 'critical');
+  }
 }
 
 function handleDocumentClick(event) {
   const closeDrawerButton = event.target.closest('[data-close-drawer]');
   if (closeDrawerButton) {
-    store.dispatch({
-      type: 'CLOSE_DRAWER'
-    });
+    store.dispatch({ type: 'CLOSE_DRAWER' });
     return;
   }
 
@@ -212,24 +276,59 @@ function handleDocumentClick(event) {
     return;
   }
 
-  const reauthorizeButton = event.target.closest('[data-integration-reauth]');
-  if (reauthorizeButton) {
-    void handleReauthorize(reauthorizeButton.dataset.integrationReauth);
+  const markAttentionButton = event.target.closest('[data-mark-attention]');
+  if (markAttentionButton) {
+    void handleInteractionAttention(markAttentionButton.dataset.markAttention);
     return;
   }
 
-  const resolveButton = event.target.closest('[data-resolve-incident]');
-  if (resolveButton) {
-    void handleResolveIncident(resolveButton.dataset.resolveIncident);
+  const reprocessButton = event.target.closest('[data-reprocess-interaction]');
+  if (reprocessButton) {
+    void handleInteractionReprocess(reprocessButton.dataset.reprocessInteraction);
     return;
   }
 
-  const contextButton = event.target.closest('[data-open-context-page][data-open-context-id]');
-  if (contextButton) {
-    void handleOpenContext(
-      contextButton.dataset.openContextPage,
-      contextButton.dataset.openContextId
+  const serviceButton = event.target.closest('[data-service-action][data-service-id]');
+  if (serviceButton) {
+    void handleServiceAction(serviceButton.dataset.serviceId, serviceButton.dataset.serviceAction);
+    return;
+  }
+
+  const serviceLogButton = event.target.closest('[data-open-service-log]');
+  if (serviceLogButton) {
+    const mappedService = serviceLogButton.dataset.openServiceLog === 'instagram'
+      ? 'instagram_dm'
+      : serviceLogButton.dataset.openServiceLog;
+    store.dispatch({
+      type: 'SET_FILTER',
+      page: 'interactions',
+      key: 'service',
+      value: mappedService
+    });
+    persistFilters();
+    navigate('interactions');
+    return;
+  }
+
+  const automationButton = event.target.closest('[data-contact-automation][data-automation-key][data-automation-value]');
+  if (automationButton) {
+    void handleContactAutomation(
+      automationButton.dataset.contactAutomation,
+      automationButton.dataset.automationKey,
+      automationButton.dataset.automationValue
     );
+    return;
+  }
+
+  const logoutButton = event.target.closest('[data-logout]');
+  if (logoutButton) {
+    void handleLogout();
+    return;
+  }
+
+  const passwordResetButton = event.target.closest('[data-send-password-reset]');
+  if (passwordResetButton) {
+    void handlePasswordReset();
     return;
   }
 
@@ -243,8 +342,8 @@ function handleDocumentClick(event) {
   }
 }
 
-function handleDocumentChange(event) {
-  const filterInput = event.target.closest('[data-filter-page][data-filter-key]');
+function updateFilter(target) {
+  const filterInput = target.closest('[data-filter-page][data-filter-key]');
   if (!filterInput) {
     return;
   }
@@ -255,44 +354,44 @@ function handleDocumentChange(event) {
     key: filterInput.dataset.filterKey,
     value: filterInput.value
   });
-}
+  persistFilters();
 
-function handleDocumentKeydown(event) {
-  if (event.key !== 'Escape') {
-    return;
-  }
-
-  if (store.getState().drawer.open) {
-    store.dispatch({
-      type: 'CLOSE_DRAWER'
-    });
+  if (filterInput.dataset.filterPage === store.getState().activePage) {
+    void loadPage(filterInput.dataset.filterPage);
   }
 }
 
-function startAutoRefresh() {
-  if (autoRefreshTimer) {
-    window.clearInterval(autoRefreshTimer);
-  }
-
-  autoRefreshTimer = window.setInterval(() => {
-    void loadPage();
-  }, AUTO_REFRESH_MS);
+function handleDocumentChange(event) {
+  updateFilter(event.target);
 }
 
-function bootstrap() {
+function handleDocumentInput(event) {
+  updateFilter(event.target);
+}
+
+async function init() {
   store.subscribe(render);
   render();
 
+  await bootstrapAuth();
+
+  const page = getPageFromLocation();
+  store.dispatch({
+    type: 'NAVIGATE',
+    page
+  });
+  setLocationPage(page);
+  await loadPage(page);
+
   document.addEventListener('click', handleDocumentClick);
   document.addEventListener('change', handleDocumentChange);
-  document.addEventListener('keydown', handleDocumentKeydown);
-
-  void loadPage();
-  startAutoRefresh();
+  document.addEventListener('input', handleDocumentInput);
+  window.addEventListener('hashchange', () => {
+    const nextPage = getPageFromLocation();
+    if (nextPage !== store.getState().activePage) {
+      navigate(nextPage);
+    }
+  });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
-} else {
-  bootstrap();
-}
+void init();

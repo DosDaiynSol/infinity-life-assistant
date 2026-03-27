@@ -18,13 +18,34 @@ export function createInitialState() {
     pages: createEmptyPages(),
     drawer: createDrawerState(),
     filtersByPage: cloneDefaultFilters(),
-    pendingAction: null
+    pendingAction: null,
+    authReady: false,
+    appUser: null,
+    csrfToken: null
   });
 }
 
 export function reduceState(state, action) {
   if (!action || !action.type) {
     return state;
+  }
+
+  if (action.type === 'AUTH_SUCCESS') {
+    return Object.freeze({
+      ...state,
+      authReady: true,
+      appUser: action.user,
+      csrfToken: action.csrfToken || state.csrfToken
+    });
+  }
+
+  if (action.type === 'AUTH_FAILURE') {
+    return Object.freeze({
+      ...state,
+      authReady: true,
+      appUser: null,
+      csrfToken: null
+    });
   }
 
   if (action.type === 'NAVIGATE') {
@@ -83,6 +104,16 @@ export function reduceState(state, action) {
           ...pageFilters,
           [action.key]: action.value
         })
+      })
+    });
+  }
+
+  if (action.type === 'HYDRATE_FILTERS') {
+    return Object.freeze({
+      ...state,
+      filtersByPage: Object.freeze({
+        ...state.filtersByPage,
+        ...(action.filtersByPage || {})
       })
     });
   }

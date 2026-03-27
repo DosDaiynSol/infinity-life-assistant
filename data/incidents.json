@@ -1,1 +1,982 @@
-[]
+[
+  {
+    "id": "inc_1774637225045_vgj26qex",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "5★ Аида Тукенова",
+    "externalRef": "google:AbFvOqmnJ6Lw9qzMgsRfL1iDME5K-kI_jsHMRRY-6a7T2Bi16fNSMJG1yHcBLvUUU0ght_wNJuyhag",
+    "openedAt": "2026-03-27T18:47:05.043Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.043Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.043Z",
+    "updatedAt": "2026-03-27T18:47:05.043Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225044_qoea04ss",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Были сегодня на приёме у мануалиста Быкова Романа Юрьевича,Профессиональный и индивидуальный подход к каждому пациенту!!! Доброта, отзывчивость, эмпатия, И все это он\"вымещает'' на своих пациентах! А главное ему не страшно доверить как свои недуги, так недуги и своих детей!!! Благодарю, с Наилучшими пожеланиями вам и вашей семье!!!\n\n(Translated by Google)\nWe had an appointment today with chiropractor Roman Yuryevich Bykov. He has a professional and individualized approach to each patient! Kindness, responsiveness, and empathy are all present in his patients! And most importantly, you can trust him with your own ailments, as well as those of your children! Thank you, and best wishes to you and your family!",
+    "externalRef": "google:AbFvOqmgdHOG4nMy0HkESP0URrWFOTyD6ng3ccfIzOH5uGwBZJp-iRQRO2QgZlzEIpRpyhJED74z",
+    "openedAt": "2026-03-27T18:47:05.042Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.042Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.042Z",
+    "updatedAt": "2026-03-27T18:47:05.042Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225043_ssuxodk1",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "(Translated by Google) Thank you very much to Ms. Ulpan, a true massage expert! May your hands not be sick. If you need a massage, sign up with Ms. Ulpan👍\n\n(Original)\nНағыз массаж маманы Ұлпан ханымға көп рахмет!Қолыңыз дерт көрмесін.Массаж керек болса Ұлпан ханымға жазылыңыздар👍",
+    "externalRef": "google:AbFvOqlYOFs9iB4N_x3UA_CbV2Ok6V7AmYAqx-JNAxAYBou9zXyt9E9GcXkw1DJ5TGvB4tsWSvws",
+    "openedAt": "2026-03-27T18:47:05.042Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.042Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.042Z",
+    "updatedAt": "2026-03-27T18:47:05.042Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225043_n0mtvyjk",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Понравилось какое отношение к пациентам,внимательное,все на высшем уровне,благодаря процедурам вылечили мне больную спину🤗\n\n(Translated by Google)\nI liked the way they treat patients, they are attentive, everything is top notch, and thanks to the procedures they cured my sore back🤗",
+    "externalRef": "google:AbFvOqlS8SrHbe82BR2acpShD0i7qv9C5SQZteHkGBpSgiOB5x8396EqrCMy4le2RD2gOK_nogwP",
+    "openedAt": "2026-03-27T18:47:05.041Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.041Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.041Z",
+    "updatedAt": "2026-03-27T18:47:05.041Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225042_7hn2mtge",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Опытные врачи и приятный персонал. Все как положено\n\n(Translated by Google)\nExperienced doctors and pleasant staff. Everything as it should be",
+    "externalRef": "google:AbFvOql-5vvxV1f4DIH8N1yH-dK1PpVQ9cCN0_wjSac8-wiQ8xhzJV8OHLV8O_TugOvwDRKA36hupQ",
+    "openedAt": "2026-03-27T18:47:05.040Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.040Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.040Z",
+    "updatedAt": "2026-03-27T18:47:05.040Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225041_nu35cq0t",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Хотим выразить огромную благодарность Ким Андрею Аркадьевичу. Так же хотим поблагодарить персонал клиники. Советуем всем.\n\n(Translated by Google)\nWe would like to express our deepest gratitude to Andrey Arkadyevich Kim. We would also like to thank the clinic staff. We recommend them to everyone.",
+    "externalRef": "google:AbFvOqnYFl4dDYSwPPtogLVt5EQI9V7iNf4meUufSg_gFeGSApZOoQKye6f-bOl2Kx-GhoLk-kTt0g",
+    "openedAt": "2026-03-27T18:47:05.040Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.040Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.040Z",
+    "updatedAt": "2026-03-27T18:47:05.040Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225040_wwae5pmd",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Отличный сервис, врачи очень понравились, всем рекомендую посетить данную клинки 5/5. Как устала менять клиники, думаю пока остановлюсь на этой. Всем рекомендую.\n\n(Translated by Google)\nExcellent service, I really liked the doctors, I recommend this clinic to everyone. 5/5. I'm tired of changing clinics, so I think I'll stick with this one for now. I recommend it to everyone.",
+    "externalRef": "google:AbFvOqkt8fMOo_pjZNMaVeLbr2TSrsIe32Of93LNQRTcdIqe8p8Op0fMmGp6X1z0AW8iEmz-fHVp",
+    "openedAt": "2026-03-27T18:47:05.039Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.039Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.039Z",
+    "updatedAt": "2026-03-27T18:47:05.039Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225039_2chb8u7z",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Хочу поблагодарить Ким Андрея Аркадьевича, профессионал своего дела, квалифицированный подход к клиенту, будем рекомендовать знакомым) спасибо за проделанную работу и отдельный Рахмет персоналу))\n\n(Translated by Google)\nI want to thank Andrey Arkadyevich Kim, a professional in his field, a qualified approach to the client, we will recommend him to friends) Thank you for the work done and a special Rakhmet to the staff))",
+    "externalRef": "google:AbFvOqnvmAuZv1hwlgPj-j_VCK4j7JH0Bae7vC3ZS4SkP8uqzwdDOMh7jTNidybCsXm4IqdMp7iT1A",
+    "openedAt": "2026-03-27T18:47:05.038Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.038Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.038Z",
+    "updatedAt": "2026-03-27T18:47:05.038Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225039_q0x8mupi",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Отличный персонал, Выражаем всей семьей Вам искреннюю благодарность за эффективную помощь - Ким А.А и отличное обслуживание клиентов директору Гасанову Гасану.\n\n(Translated by Google)\nExcellent staff, our whole family expresses our sincere gratitude to you for your effective assistance - Kim A.A. and excellent customer service to Director Gasanov Gasan.",
+    "externalRef": "google:AbFvOql3GuPZZeejItucEcReOobYLiyh4KWDJxlFBFwui9zSk7Wnu6MdQAQtlFFoiB3Ef0bgktU3",
+    "openedAt": "2026-03-27T18:47:05.037Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.037Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.037Z",
+    "updatedAt": "2026-03-27T18:47:05.037Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225038_dmeg7gok",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "хочу выразить слова благодарности Ким Андрею Аркадьевичу , за оказанную мне помощь , были проблемы со спиной , после пройденных мною процедур стал чувствовать себя гараздо легче и свободнее. Всем рекомендую!\n\n(Translated by Google)\nI want to express my gratitude to Andrey Arkadyevich Kim for the help he provided me with back problems. After the treatments, I began to feel much lighter and freer. I recommend him to everyone!",
+    "externalRef": "google:AbFvOqmCFP9xofSKnfME9fOGoAvw2uXi9zUaKbz3eqYC8Qcy-N3pP38KANe70Y_RWf9Rn0sj0adngA",
+    "openedAt": "2026-03-27T18:47:05.037Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.037Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.037Z",
+    "updatedAt": "2026-03-27T18:47:05.037Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225037_bc86r0wf",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Рекомендую данный медицинский  центр\nОбслуживание на высшем уровне, высококвалифицированные специалисты. Помимо профессионализма хотела бы отметить чуткое отношение к пациентам и очень доброжелательный персонал.\n\n(Translated by Google)\nI recommend this medical center.\nThe service is top-notch, and the specialists are highly qualified. In addition to their professionalism, I would also like to highlight their caring attitude toward patients and the very friendly staff.",
+    "externalRef": "google:AbFvOqnYAwBQgKkYGSnTKqxZUL_5iilclsruu6YXtCaLZbFTf5-jf39IhPWBneJymwpqfDzcIP2ImA",
+    "openedAt": "2026-03-27T18:47:05.036Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.036Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.036Z",
+    "updatedAt": "2026-03-27T18:47:05.036Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225037_xhu4e9co",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Отличная клиника! Вежливый и внимательный персонал!\n\n(Translated by Google)\nExcellent clinic! Polite and attentive staff!",
+    "externalRef": "google:AbFvOqmsQy4_wb7nQvI6O9ADBj2y9ys9nf_D3kjlPFlE0DWoosn1AXQ8aWLQmeJUGldYOzUt7W1g7w",
+    "openedAt": "2026-03-27T18:47:05.035Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.035Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.035Z",
+    "updatedAt": "2026-03-27T18:47:05.035Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225036_kx29o713",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Спасибо клинике, приятный и доброжелательный персонал\n\n(Translated by Google)\nThanks to the clinic, pleasant and friendly staff",
+    "externalRef": "google:AbFvOqkdMSJ6GnD-TVWidHGWgeqbVH--yUN8PmbrJC15smigoFPe2PN_slgxDehUOsWEEhiwlqE8TQ",
+    "openedAt": "2026-03-27T18:47:05.034Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.034Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.034Z",
+    "updatedAt": "2026-03-27T18:47:05.034Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225035_jbq14gx0",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Благодарю за доброжелательный прием и оказанные медицинские процедуры Ким А.А. и Эм Н.В.\n\n(Translated by Google)\nThank you for the friendly welcome and medical procedures provided to Kim A.A. and Em N.V.",
+    "externalRef": "google:AbFvOqmO00kBAsDTo1g99EBeEond1wZndox_e6nYnYC-pTMIHxhQ0ZpBvnfbK6dpYJ1nRWf64JrF8w",
+    "openedAt": "2026-03-27T18:47:05.034Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.034Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.034Z",
+    "updatedAt": "2026-03-27T18:47:05.034Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225035_e0yzra3a",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Очень хороший медицинский центр у все внимательные вежливые а самое главное грамотные врачи\n\n(Translated by Google)\nA very good medical center, all the doctors are attentive, polite, and most importantly, competent.",
+    "externalRef": "google:AbFvOqnbBlpDawEdnz361CIrRsC82daPzzzAGUTITrjhQnGRNZFfelozvm8Iz5A__R0Ow-82kUkONw",
+    "openedAt": "2026-03-27T18:47:05.033Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.033Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.033Z",
+    "updatedAt": "2026-03-27T18:47:05.033Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225034_8t3drv6a",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Не рекомендую, после 3 сеансов стало хуже, по разговору упор только на деньги, не заинтересован в вашем лечении, а может просто не умеет. Буду дальше искать своего доктора.\n\n(Translated by Google)\nI don't recommend it. After three sessions, things got worse. The conversation was all about money. He's not interested in your treatment, or maybe he just doesn't know how. I'll keep looking for my own doctor.",
+    "externalRef": "google:AbFvOqn_aDwLY4pGjeaM8c2018kG5vplWnnMynM8h181tRysgv3XwthCeFRrRpe0gMUmaBe_ZyXd",
+    "openedAt": "2026-03-27T18:47:05.032Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.032Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.032Z",
+    "updatedAt": "2026-03-27T18:47:05.032Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225033_hg4wswzf",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Отлично, профессионально, чисто\n\n(Translated by Google)\nExcellent, professional, clean",
+    "externalRef": "google:AbFvOqkaXJiB4QeSQXtoutTHa85aswci8wzgQOaX0HH6P1G1DFoPPMpoUIkCqbmNizjSBkhH1VVfNQ",
+    "openedAt": "2026-03-27T18:47:05.032Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.032Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.032Z",
+    "updatedAt": "2026-03-27T18:47:05.032Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225032_3qv46x0e",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "(Translated by Google) Good day! This clinic has very qualified specialists and staff who work at a professional level. I liked it. I recommend it to anyone who wants to come and get treatment.\n\n(Original)\nҚайырлы күн! Бұл клиникада кәсіби деңгейде өте білікті мамандар мен қызметкерлер жұмыс жасайды. Маған ұнады. Келіп ем аламын деушілерге ұсынамын.",
+    "externalRef": "google:AbFvOqlQ7-zoCTdV_2Hu5oZwc8M8X36ehDGOkBOz0i-GC-xj8QO68l6jAw1E2tbmQ4ZsNQoFztZZcQ",
+    "openedAt": "2026-03-27T18:47:05.031Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.031Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.031Z",
+    "updatedAt": "2026-03-27T18:47:05.031Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225031_cbbfxbvw",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Очень очень плохое обслуживание. Администратор абсолютно не знает свою работу. Пыталась пожаловаться, к сожалению, критику не воспринимают. Слишком дорого для такого плохого обслуживания. Специалисты не уникальны, можно найти в другом месте таких же, где тебя обслужат с должным уважением.\n\n(Translated by Google)\nVery, very bad service. The receptionist has absolutely no knowledge of her job. I tried to complain, but unfortunately, criticism is not taken seriously. Too expensive for such poor service. These specialists are not unique; you can find similar ones elsewhere who will treat you with due respect.",
+    "externalRef": "google:AbFvOqkR0JERMbaBrMKkvK2Eyv9HvqGiNY16NFzRKNFB_hqvRiC2kibYn5_8oBAI8ELS5CP23-sGHg",
+    "openedAt": "2026-03-27T18:47:05.030Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.030Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.030Z",
+    "updatedAt": "2026-03-27T18:47:05.030Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225031_0l0p6xn1",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "5★ Adilet Adilbekov",
+    "externalRef": "google:AbFvOqnpZPa4wrg6IfMiY2tL0ksnuSwqWvwur89MzMTTPISOKIwz2Ip6IxWXNasJTePfUaMO7Smn",
+    "openedAt": "2026-03-27T18:47:05.029Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.029Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.029Z",
+    "updatedAt": "2026-03-27T18:47:05.029Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225030_r1vlhg3z",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "📍Астана\nИщу хорошего ЛОР-фониатра. Голос садится со скоростью света. Нужна эффективная экспресс-мера.🗣️",
+    "externalRef": "threads:abc1c608-2576-4e07-b6f7-11c0f83cfb8e",
+    "openedAt": "2026-03-27T18:47:05.028Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.028Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.028Z",
+    "updatedAt": "2026-03-27T18:47:05.028Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225029_km379v2e",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Была у специалиста Ерлана Максимовича. Очень понравилась клиника и работа мастера. Человек не просто мастер своего дела но и имеет очень глубокие мысли и знания. Для себя взяла многое. всем рекомендую 👍👍👍😃\n\n(Translated by Google)\nI visited specialist Erlan Maksimovich. I really liked the clinic and the work of the master. The man is not just a master of his craft, but also has very deep thoughts and knowledge. I learned a lot for myself. I recommend it to everyone 👍👍👍😃",
+    "externalRef": "google:AbFvOqkIer6jmmjKqIS41AfEE2fQ4x3DNG1eoDNvzCdvVF-KkC2NbEoqaCIiJviQZnY3_Jr2ordw",
+    "openedAt": "2026-03-27T18:47:05.028Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.028Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.028Z",
+    "updatedAt": "2026-03-27T18:47:05.028Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225028_vrm6nt5r",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "5★ Катима Бек",
+    "externalRef": "google:AbFvOqnG-Kt3HonOhnUCZu3k3iBzATYLfsT_E126_g1AASDBQf3p54XYaNVnPzQcpcmROXZLwTG5NQ",
+    "openedAt": "2026-03-27T18:47:05.027Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.027Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.027Z",
+    "updatedAt": "2026-03-27T18:47:05.027Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225027_rwgsjoo0",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "я крайне не доволен так как я изначально пришёл описал врачу свою проблему в итоге я потратил около 300000 тенге на приём и лечении в течени 5 дней это я ещё лекарства и уколы которые мне делали покупал сам но проблема так и не решилась даже изменении не было пришлось ехать за границу чтобы лечить болезнь а ведь мы платим деньги и верим что нам помогут  в итоге я нашёл проблему и мне помогли только заграницей результат я почувствовал я около 1000000 потратил следую указанием врачей из  этой клиники  но оказалось все в пустую я вообще требую вернуть мне мои деньги так как нечего не изменилось\n\n(Translated by Google)\nI am extremely dissatisfied because I initially went to the doctor and described my problem. In the end, I spent about 300,000 tenge on an appointment and treatment for 5 days. I also bought the medications and injections that they gave me myself, but the problem was not solved. There was not even a change. I had to go abroad to treat the disease, but we pay money and believe that they will help us. In the end, I found the problem and they helped me only abroad. I felt the result. I spent about 1,000,000 following the instructions of the doctors from this clinic, but it turned out to be all in vain. I generally demand a refund because nothing has changed.",
+    "externalRef": "google:AbFvOqn1jtDECZLDT70MRibr8rehlKpsCB-KB_VeQDhsG68pL2HyiQzQbp4CMxNwHSvbL4zjFUg28A",
+    "openedAt": "2026-03-27T18:47:05.026Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.026Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.026Z",
+    "updatedAt": "2026-03-27T18:47:05.026Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225026_4s1lp8qi",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "На рецепшн девушки неприветливые: ни здрасьте , ни досвидания, самое главное - это чтобы клиент заплатил, остальное не важно.\n\n(Translated by Google)\nThe girls at the reception are unfriendly: no hello, no goodbye, the most important thing is that the client pays, the rest is not important.",
+    "externalRef": "google:AbFvOqkMtXcR_WiU15rCNSQopmngmwrpnJg2Kfre-yLUXXgpZS63SWxE9f4ZMzPDUivPftlDttZAfg",
+    "openedAt": "2026-03-27T18:47:05.025Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.025Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.025Z",
+    "updatedAt": "2026-03-27T18:47:05.025Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225025_kz7p6j9r",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Визит в клинику оставляет самые хорошие впечатления. Девочки приветливо встречают на ресепшн, провожают в кабинет к специалисту. Отдельно хочется отметить кардиолога Журилину Полину Павловну. Наблюдаюсь у неё и хочу сказать самый хороший специалист,. Всем рекомендую данную клинику.\n\n(Translated by Google)\nMy visit to the clinic left the best impression. The girls greeted me warmly at reception and escorted me to the specialist's office. I'd like to especially mention cardiologist Polina Pavlovna Zhurilina. I'm seeing her and I must say she's the best specialist. I recommend this clinic to everyone.",
+    "externalRef": "google:AbFvOqmeJCprGYUhtbTx4EmkZToLAnrYwo3yRf07ym-XDLUXF7sheHpuvn7gQgWMzZzaiqGzkOzDsg",
+    "openedAt": "2026-03-27T18:47:05.024Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.024Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.024Z",
+    "updatedAt": "2026-03-27T18:47:05.024Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225024_oal28k0e",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Ого прям как у меня и грыжа и протрузия и позвонки, как лечитесь?",
+    "externalRef": "threads:b441e8bc-36b0-4d22-89e0-530630e0909b",
+    "openedAt": "2026-03-27T18:47:05.023Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.023Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.023Z",
+    "updatedAt": "2026-03-27T18:47:05.023Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225024_ems3y36h",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Ужасное клиника, не советую. Я была у Ким А.К. он даже не смотрел на мою МРТ снимок, за 1-2 хрусты - правки 17000 тысяч тенге заплатила в итоге мне хуже сделали. Не лечит а наоборот калечит. Деньги на ветер, никому не посоветую.\n\n(Translated by Google)\nThis clinic is terrible, I don't recommend it. I went to Kim A.K., and he didn't even look at my MRI. I paid 17,000 tenge for 1-2 crunches and adjustments, but in the end, they made things worse. He doesn't heal, he just cripples. A waste of money, I wouldn't recommend him to anyone.",
+    "externalRef": "google:AbFvOqnw6DQfhVq95Q9NoRZdMl_0-gIfvPWcrNQZu57GeirAtzQCsLMPGaJ5eD-ruHk9hXkIZFqSVQ",
+    "openedAt": "2026-03-27T18:47:05.022Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.022Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.022Z",
+    "updatedAt": "2026-03-27T18:47:05.022Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225023_x6zk67j0",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Мануальщик без всяких обследований начинает опасно дёргать за шею и бить по позвоночнику. Массаж на спину был ужасно дискомфортный. После таких недешевых процедур только хуже стало. Не рекомендую.\n\n(Translated by Google)\nThe chiropractor, without any examinations, starts to dangerously tug at the neck and hit the spine. The back massage was terribly uncomfortable. After such expensive procedures it only got worse. I do not recommend it.",
+    "externalRef": "google:AbFvOqlDBqYyecNsgPoBvlQ3rEfK7-OcNArQjzXDdOGsD0LxCqpgiI3fFnBGzjFhkF77pl6T3-hkOg",
+    "openedAt": "2026-03-27T18:47:05.022Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.022Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.022Z",
+    "updatedAt": "2026-03-27T18:47:05.022Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225022_5znmj6oo",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Заплотили за лечение 200000 по итогу стало только хуже,врач Стамкулов Аскарали Байалиевич всем подряд назначает \"чудо\" уколы которые на самом деле не лечат а только колечат.  После назначенного лечения стало только хуже. Пытались связаться с руководством,но получили только игнорирование.\n\n(Translated by Google)\nWe paid 200,000 for treatment, but it only got worse. Doctor Stamkulov Askarali Bayalievich prescribes \"miracle\" injections to everyone that don't actually heal but only cripple. After the prescribed treatment, it only got worse. We tried to contact the management, but only got ignored.",
+    "externalRef": "google:AbFvOqnrwEvhnEv6VLKVF0Lp5-LwJxaPp_xcRP3sbNE0vfqcOk-QpO5PrMTQXX4b34mkvYm7NWlSXQ",
+    "openedAt": "2026-03-27T18:47:05.021Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.021Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.021Z",
+    "updatedAt": "2026-03-27T18:47:05.021Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225021_ujzz6rg3",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Мне нужен взросл невролог . \nЯ подозреваю у меня , мигрень . \nБоли головные нестерпимые , тошнит . Боли сопровождаются с чувствительностью к свету , к шуму . \nТошнит ужасно , я не могу жить иногда полноценно из за болей . \nНеврологи , подскажите , похоже на мигрень ?",
+    "externalRef": "threads:fc18ba4e-9113-4df9-af71-8d01e81d3df4",
+    "openedAt": "2026-03-27T18:47:05.020Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.020Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.020Z",
+    "updatedAt": "2026-03-27T18:47:05.020Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225020_fxjxh8a8",
+    "service": "google_reviews",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Google Reviews",
+    "detail": "Хочу порекомендовать всем Врача ортопеда Стамкулова Асқар Байалиевича. Он очень помог мне ,при лечении коленных суставов.Пришла к ним ,с трудом! Они классно пролечили,теперь долечиваюся периодически.А все,говорили надо менять Суставы!\n\n(Translated by Google)\nI would like to recommend orthopedic surgeon Stamkulov Askar Bayalievich to everyone. He really helped me with my knee joints. I came to him with great difficulty! They treated me wonderfully, and now I continue to receive treatment periodically. Everyone kept saying I needed to have my joints replaced!",
+    "externalRef": "google:AbFvOqnCqwLXCfcNuVPAROMt_jDHGeAXdnuslc8Gf5sY2Fec3W3kMpKxlYBa1eXEAVHRAFqTgn895A",
+    "openedAt": "2026-03-27T18:47:05.019Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.019Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.019Z",
+    "updatedAt": "2026-03-27T18:47:05.019Z",
+    "count": 1,
+    "meta": {
+      "service": "google_reviews",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225020_udq092ol",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "У МЕНЯ ПРОБЛЕМА \n\nЯ не знаю, что со мной происходит, в конце лета 2025 года меня стало очень сильно укачивать в транспорте, хотя до этого проблем не было… \nЖутко болит голова и кружится, также наблюдаю шум в правом ухе\n\nЯ мучаюсь уже больше полу года, а что делать с этим не знаю( \nДелала МРТ головного мозга, нарушений не выявлено \nСделала Узи сосудов шеи- тоже нарушений нет \nРентгенография шейного отдела позвоночника- гипермобтльность позвонков. \n\nКто-то сталкивался с таким?",
+    "externalRef": "threads:e3cdc4f1-6353-40ea-a452-58925235262e",
+    "openedAt": "2026-03-27T18:47:05.018Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.018Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.018Z",
+    "updatedAt": "2026-03-27T18:47:05.018Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225019_udgjuq7h",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "🆘 - нужен срочно детский невролог (эпилептолог)",
+    "externalRef": "threads:3527bff0-3400-4653-afd3-3672bc4b760c",
+    "openedAt": "2026-03-27T18:47:05.018Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.018Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.018Z",
+    "updatedAt": "2026-03-27T18:47:05.018Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225018_oe6dp7r3",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Ребята знаю силу тредса, нужен грамотный , знающий свою работу врач массажист , болит шейно-воротниковая зона из-за этого постоянно сильные , тянущие головные боли 😑, поделитесь пожалуйста контактами .",
+    "externalRef": "threads:318e8225-0399-4a73-9333-a9b2dcd5ff8a",
+    "openedAt": "2026-03-27T18:47:05.017Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.017Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.017Z",
+    "updatedAt": "2026-03-27T18:47:05.017Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225017_yi7fillg",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана🚩\nПосоветуйте хорошего ЛОР врача и Невролога детский📍",
+    "externalRef": "threads:9025dfb6-ba17-4da4-a1c8-2dcaafe938c5",
+    "openedAt": "2026-03-27T18:47:05.016Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.016Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.016Z",
+    "updatedAt": "2026-03-27T18:47:05.016Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225016_dj98eu3g",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Есть кто лечил грыжу и реально вылечил? Дайте совет",
+    "externalRef": "threads:6bd2ce04-a6bb-444e-b06f-741cda79815d",
+    "openedAt": "2026-03-27T18:47:05.015Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.015Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.015Z",
+    "updatedAt": "2026-03-27T18:47:05.015Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225015_5puct6n5",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Сә Сәлеметсіздер ме!\nАстана қаласында 6 айлық балама жақсы, сенімді массажист іздеп жүрмін. Нәрестелермен нақты тәжірибесі бар, жұмсақ, ұқыпты маман керек болып тұр.\n\nКімге барып көрдіңіздер, кімнен нәтиже болды жаза кетсеңіздер немесе ұсыныстарыңыз болса, пікірге немесе жеке хабарламаға жаза аласыздар ма? \nАлдын ала үлкен рахмет 🙏",
+    "externalRef": "threads:22aa106b-cde6-4829-bcba-ace2813cdfb9",
+    "openedAt": "2026-03-27T18:47:05.015Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.015Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.015Z",
+    "updatedAt": "2026-03-27T18:47:05.015Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225015_nmiq9oa8",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана қаласы🙏\nАнам бір қолы көтере алмай қалды аяқ асты, иық шынтақ бөлігін көтере алмай жүр( жансызданбаған). Неден болуы мүмкін, неврологическийма ?Қандай мамандарға барса болады, өтініш медцентр білікті врачтар, реально результат беретін мамандар болса бөлісіңіздерші, контакт болса тіпті жақсы‼️",
+    "externalRef": "threads:db6b8210-dfe4-4607-b56a-f78c36f2ce04",
+    "openedAt": "2026-03-27T18:47:05.014Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.014Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.014Z",
+    "updatedAt": "2026-03-27T18:47:05.014Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225014_4bzvzc9j",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана қаласы!\n\nМықты білетін детский невропатолог,педиатр,жалпы мед.центр керек еді(анализ,узи головы жасайтын)✨\nБаланың жасы 1,6да 🩶\nБілетіндеріңіз болса,бөлісіңіздерші💫\n\nГород Астана!\nНужен хороший детский невропатолог,педиатр,или хороший мед.центр что бы там все анализы,и узи головы сделать✨\nРебенку 1,6 годик\nПодскажите пожалуйста,буду благодарна 💫",
+    "externalRef": "threads:e9655cc8-4438-41f7-8dba-7177f68c6b87",
+    "openedAt": "2026-03-27T18:47:05.014Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.014Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.014Z",
+    "updatedAt": "2026-03-27T18:47:05.014Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225013_ionk87u1",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана , ребят у кого был тонзиллит ?\nКакого лора посоветуете ? Детский/взрослый. \n\nЧто помогло вам вылечиться",
+    "externalRef": "threads:77063fa9-4e2c-46bf-89f5-7ce489958d4e",
+    "openedAt": "2026-03-27T18:47:05.009Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.009Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.009Z",
+    "updatedAt": "2026-03-27T18:47:05.009Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225008_bl12go83",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана!\nСвекрови 71 год. Грыжа. Подскажите хорошего невропатолога/нейрохирурга. \nКто как лечил без операции?\nБыл и массаж, и иглоукалывание, и уколы, мази и т д. Не помогает. Отдает на ноги. \nСтарается много ходить, но после этого сильные боли. Неужели без операции никак?\nПосоветуйте врача грамотного. \nВ тиктоке она насмотрелась всяких китайских и др клиники которые обещают уау результат, но не знаю стоит ли(одна китайская клиника содрала уже столько денег, а эффекта не дало). \nHELP!",
+    "externalRef": "threads:471ddbc9-9018-454e-adba-e026c16ead6b",
+    "openedAt": "2026-03-27T18:47:05.007Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.007Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.007Z",
+    "updatedAt": "2026-03-27T18:47:05.007Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225002_5c16jr1p",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "📍 г. Астана\n\nКто хочет качественный массаж?\nДлительность сеанса — 60 минут.\nБонус: бесплатная диагностика тела(сколиоз,холка,грыжа,протрузия,после перелома,после инсульта,детский айлық балаларға,беременныйларға,жабысып қалған жауырын)\nЗапись: +7 700 714 8894",
+    "externalRef": "threads:bd22cd6f-e4cf-4bb1-9299-3c9a0996094e",
+    "openedAt": "2026-03-27T18:47:05.001Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.001Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.001Z",
+    "updatedAt": "2026-03-27T18:47:05.001Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637225000_2mk676a2",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана, Жақсы нейрохирург, невролог, невропотолог кім бар тағы грыжамен жұмыс жасайтын. Посоветуйте пожалуйста 🙏  Операцияға жеткізбейтін 🙃",
+    "externalRef": "threads:1465d1ac-7e14-44c3-95d3-4325fdc251d9",
+    "openedAt": "2026-03-27T18:47:05.000Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:05.000Z",
+    "lastAlertedAt": "2026-03-27T18:47:05.000Z",
+    "updatedAt": "2026-03-27T18:47:05.000Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637224998_1aqr9l6f",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "📍 г. Астана\n❗❗❗ТЕК ҚЫЗДАР ҚАУЫМЫНА❗❗❗\nКто хочет оздоровительный массаж всего тела всего за 8 000 тг? \nДлительность сеанса — 60 минут.\nБонус: бесплатная диагностика тела(сколиоз,холка,грыжа,протрузия защемление седалищного нерва,арқа,аяқ,бел аурулары,жауырын жабысуы т.б.)\nЗапись: 87765393917",
+    "externalRef": "threads:243339b7-d032-4540-b575-89f52acef4b0",
+    "openedAt": "2026-03-27T18:47:04.993Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:04.993Z",
+    "lastAlertedAt": "2026-03-27T18:47:04.993Z",
+    "updatedAt": "2026-03-27T18:47:04.993Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637224993_yvupnrhn",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Сегодня меня восхитила мамочка которая приехала из Караганды в Астана для того, чтоб показать ребенка мне! Видно, что очень ответственная мама, регулярно водила на проф осмотры . Посмотрела мальчика 5 лет ранее неврологами выставлены  диагнозы:РОП ЦНС,  в 2 года поставила :СДВГ.ЗРР. \nПолностью узнав анамнез и осмотрев ребенка поняла,что нет никакого поражения ЦНС, а признаки Аутизма? Радует, что мама всегда водила на педагогическую коррекцию. И еще так переживает, что не хватило денег на",
+    "externalRef": "threads:a0bd69a8-b8a2-4329-9c52-1f1b3c32d3bc",
+    "openedAt": "2026-03-27T18:47:04.992Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:04.992Z",
+    "lastAlertedAt": "2026-03-27T18:47:04.992Z",
+    "updatedAt": "2026-03-27T18:47:04.992Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637224992_9d5918xx",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана, верю в силу тредс. Открываем большой специализированный лор центр в Астане на левом берегу, с доступными ценами, из инсайтов, хочется ввести ночные приемы, что бы можно было обращаться в экстренных случаях, допустим ребенок в нос что то запихнул, перелом носа после драки и тд. \n\nДайте обратную связь плиз, Посещали бы такой? Что бы хотели в нем видеть? Что Вам важно при посещении клиник?",
+    "externalRef": "threads:f6fe8744-f67b-456d-98de-c00da89d4d9c",
+    "openedAt": "2026-03-27T18:47:04.992Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:04.992Z",
+    "lastAlertedAt": "2026-03-27T18:47:04.992Z",
+    "updatedAt": "2026-03-27T18:47:04.992Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637224992_0dx0bz5u",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Город Астана \nСрочно нужен травматолог в Астане! После операции возникли осложнения (возможна миграция пластины, есть выделения). Подскажите, пожалуйста, куда можно обратиться прямо сейчас или дайте контакты врача 🙏",
+    "externalRef": "threads:ceda040c-b418-40c5-a7cb-8752ac690b6a",
+    "openedAt": "2026-03-27T18:47:04.991Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:04.991Z",
+    "lastAlertedAt": "2026-03-27T18:47:04.991Z",
+    "updatedAt": "2026-03-27T18:47:04.991Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  },
+  {
+    "id": "inc_1774637224990_cftcgi9v",
+    "service": "threads",
+    "severity": "critical",
+    "state": "open",
+    "reasonCode": "sla_breach",
+    "title": "SLA 30 минут нарушен: Threads",
+    "detail": "Астана \n Срочно ищу хорошего и опытного травматолога в городе Астана. Пожалуйста, посоветуйте проверенного врача или клинику. Буду очень благодарен за рекомендации.",
+    "externalRef": "threads:eea0773a-f44c-4773-ab16-2431d95a34cc",
+    "openedAt": "2026-03-27T18:47:04.989Z",
+    "resolvedAt": null,
+    "lastSeenAt": "2026-03-27T18:47:04.989Z",
+    "lastAlertedAt": "2026-03-27T18:47:04.989Z",
+    "updatedAt": "2026-03-27T18:47:04.989Z",
+    "count": 1,
+    "meta": {
+      "service": "threads",
+      "contactId": null
+    }
+  }
+]

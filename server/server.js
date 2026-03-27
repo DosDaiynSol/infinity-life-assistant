@@ -3,8 +3,19 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const InstagramLiveAssistant = require('./services/instagram-live-assistant');
+const { AppAuthService } = require('./services/app-auth-service');
+const { createRequireCsrfMiddleware } = require('./services/csrf-protection');
+const { InteractionReadModel } = require('./services/interaction-read-model');
+const InteractionOverrideStore = require('./services/interaction-overrides');
 const userManager = require('./services/user-manager');
 const statsManager = require('./services/stats-manager');
+const { createAuthRouter, createRequireAppSessionApi, createRequireAppSessionPage } = require('./routes/auth-routes');
+const {
+  buildOverviewPayload,
+  buildProfilePayload,
+  buildServiceCards,
+  buildServicesPayload
+} = require('./services/command-center-payloads');
 
 // YouTube services
 const youtubeOAuth = require('./services/youtube-oauth');
@@ -37,9 +48,15 @@ app.use(cors());
 app.use(express.text({ type: 'text/*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '../dashboard')));
+app.use(express.static(path.join(__dirname, '../dashboard'), {
+  index: false
+}));
 
 const assistantRuntime = new InstagramLiveAssistant();
+const authService = new AppAuthService();
+const interactionOverrideStore = new InteractionOverrideStore();
+const requireCsrf = createRequireCsrfMiddleware();
+const requireAppSessionPage = createRequireAppSessionPage({ authService });
 
 // Legacy queue endpoints are deprecated, but we keep an empty shape so older
 // helpers do not crash while the dashboard is being migrated.
@@ -861,6 +878,230 @@ async function loadRealtimeDashboardSnapshots({ includeGoogleReviews = true, inc
   };
 }
 
+const interactionReadModel = new InteractionReadModel({
+  assistantRuntime,
+  contactManager: userManager,
+  overrideStore: interactionOverrideStore,
+  loadGoogleOperationalData,
+  loadThreadsOperationalData,
+  loadYouTubeOperationalData
+});
+
+function getLocalizedServiceName(serviceId, fallbackName) {
+  const labels = {
+    instagram_meta: 'Instagram',
+    youtube: 'YouTube',
+    google_business: 'Google Reviews',
+    threads: 'Threads'
+  };
+
+  return labels[serviceId] || fallbackName || serviceId;
+}
+
+function getRussianServiceId(serviceId) {
+  if (serviceId === 'instagram_meta') {
+    return 'instagram';
+  }
+
+  if (serviceId === 'google_business') {
+    return 'google_reviews';
+  }
+
+  return serviceId;
+}
+
+async function buildServicesControlPayload() {
+  const snapshots = await loadRealtimeDashboardSnapshots({
+    includeGoogleReviews: true,
+    includeThreadPosts: true
+  });
+
+  const services = buildServiceCards(snapshots.integrations.map((service) => ({
+    id: getRussianServiceId(service.id),
+    integrationId: service.id,
+    name: getLocalizedServiceName(service.id, service.name),
+    provider: service.provider,
+    status: service.status,
+    summary: service.summary,
+    lastCheckedAt: service.lastCheckedAt,
+    lastError: service.lastError,
+    unprocessedCount: service.id === 'instagram_meta'
+      ? (snapshots.instagramRealtime.metrics.pending || 0)
+      : (service.id === 'google_business'
+        ? (snapshots.google.stats.pendingReviews || 0)
+        : (service.id === 'youtube'
+          ? Math.max(0, (snapshots.youtube.stats.totalComments || 0) - (snapshots.youtube.stats.totalResponses || 0))
+          : (snapshots.threads.stats.newPosts || snapshots.threads.stats.validated || 0))),
+    errorCount: service.status === 'healthy'
+      ? 0
+      : 1,
+    processed24h: service.id === 'instagram_meta'
+      ? (snapshots.instagramRealtime.metrics.delivered || 0)
+      : (service.id === 'google_business'
+        ? (snapshots.google.stats.totalReplied || 0)
+        : (service.id === 'youtube'
+          ? (snapshots.youtube.stats.totalResponses || 0)
+          : (snapshots.threads.stats.replied || 0))),
+    actions: [
+      'process-pending',
+      'check-health',
+      ...(service.status === 'reauth_required' ? ['reauthorize'] : [])
+    ]
+  })));
+
+  return buildServicesPayload({
+    services
+  });
+}
+
+async function syncSlaBreaches() {
+  const payload = await interactionReadModel.listInteractions({
+    service: 'all',
+    status: 'all',
+    limit: 250
+  });
+  const breachedItems = payload.data.filter((item) => item.slaBreached);
+
+  await Promise.all(breachedItems.map(async (item) => {
+    const currentOverride = await interactionOverrideStore.getOverride(item.id);
+    if (currentOverride?.slaEscalatedAt) {
+      return;
+    }
+
+    await interactionOverrideStore.setOverride(item.id, {
+      status: 'needs_attention',
+      manualAttention: true,
+      slaEscalatedAt: new Date().toISOString()
+    });
+
+    await assistantRuntime.incidentManager.openIncident({
+      service: item.service,
+      severity: 'critical',
+      reasonCode: 'sla_breach',
+      title: `SLA 30 минут нарушен: ${item.serviceLabel}`,
+      detail: item.previewText || item.title,
+      externalRef: item.id,
+      meta: {
+        service: item.service,
+        contactId: item.contactId || null
+      }
+    });
+  }));
+}
+
+async function executeInstagramPendingProcessing() {
+  const pendingEvents = await assistantRuntime.eventStore.listPendingEvents(100);
+  const conversationIds = [...new Set(
+    pendingEvents
+      .filter((event) => event.channel === 'dm')
+      .map((event) => event.conversationId)
+      .filter(Boolean)
+  )];
+  const commentIds = pendingEvents
+    .filter((event) => event.channel === 'comment')
+    .map((event) => event.id);
+
+  await Promise.all([
+    ...conversationIds.map((conversationId) => assistantRuntime.processDMConversation(conversationId)),
+    ...commentIds.map((eventId) => assistantRuntime.processCommentEvent(eventId))
+  ]);
+
+  return {
+    status: 'ok',
+    processed: pendingEvents.length,
+    message: 'Необработанные сообщения Instagram отправлены в обработку.'
+  };
+}
+
+async function executeServiceAction(serviceId, action) {
+  if (serviceId === 'instagram') {
+    if (action === 'process-pending') {
+      return executeInstagramPendingProcessing();
+    }
+
+    if (action === 'check-health') {
+      const payload = await buildServicesControlPayload();
+      return payload.services.find((service) => service.id === 'instagram') || null;
+    }
+  }
+
+  if (serviceId === 'google_reviews') {
+    if (action === 'process-pending') {
+      const result = await googleReviewsHandler.processReviews({
+        forceReply: false,
+        limit: 10
+      });
+      return {
+        status: 'ok',
+        processed: result.repliedCount || 0,
+        message: 'Обработка отзывов Google запущена.',
+        result
+      };
+    }
+
+    if (action === 'check-health') {
+      const payload = await buildServicesControlPayload();
+      return payload.services.find((service) => service.id === 'google_reviews') || null;
+    }
+  }
+
+  if (serviceId === 'youtube') {
+    if (action === 'process-pending') {
+      const result = await processYouTubeComments(0);
+      return {
+        status: 'ok',
+        processed: result.totalReplied || 0,
+        message: 'Обработка комментариев YouTube завершена.',
+        result
+      };
+    }
+
+    if (action === 'check-health') {
+      const payload = await buildServicesControlPayload();
+      return payload.services.find((service) => service.id === 'youtube') || null;
+    }
+  }
+
+  if (serviceId === 'threads') {
+    if (action === 'process-pending') {
+      if (threadsKeywordSearch.isSearching) {
+        return {
+          status: 'already_searching',
+          message: 'Поиск в Threads уже выполняется.'
+        };
+      }
+
+      threadsKeywordSearch.runSearchCycle(0).catch((error) => {
+        console.error('[Threads] Manual process error:', error.message);
+      });
+
+      return {
+        status: 'started',
+        processed: 0,
+        message: 'Поиск и обработка Threads запущены.'
+      };
+    }
+
+    if (action === 'check-health') {
+      const payload = await buildServicesControlPayload();
+      return payload.services.find((service) => service.id === 'threads') || null;
+    }
+  }
+
+  if (action === 'reauthorize') {
+    const normalizedService = serviceId === 'google_reviews'
+      ? 'google_business'
+      : (serviceId === 'instagram' ? 'instagram_meta' : serviceId);
+
+    return {
+      status: 'ok',
+      ...getServiceReauthConfig(normalizedService)
+    };
+  }
+
+  throw new Error(`Unsupported service action: ${serviceId}/${action}`);
+}
+
 // Webhook verification (Meta/Instagram)
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -911,6 +1152,218 @@ app.post('/webhook', async (req, res) => {
   }
 
   res.status(200).json({ status: 'ok' });
+});
+
+app.use('/api/auth', createAuthRouter({
+  authService,
+  telegramNotifier: assistantRuntime.incidentManager.notifier
+}));
+
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) {
+    next();
+    return;
+  }
+
+  createRequireAppSessionApi({ authService })(req, res, next);
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) {
+    next();
+    return;
+  }
+
+  requireCsrf(req, res, next);
+});
+
+app.get('/api/interactions', async (req, res) => {
+  try {
+    await syncSlaBreaches();
+    const payload = await interactionReadModel.listInteractions(req.query || {});
+    res.json(payload);
+  } catch (error) {
+    console.error('[API] Interactions error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/interactions/:id', async (req, res) => {
+  try {
+    const item = await interactionReadModel.getInteraction(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Обращение не найдено' });
+    }
+
+    return res.json({
+      data: item
+    });
+  } catch (error) {
+    console.error('[API] Interaction detail error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/interactions/:id/actions/mark-attention', async (req, res) => {
+  try {
+    const item = await interactionReadModel.getInteraction(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Обращение не найдено' });
+    }
+
+    const override = await interactionOverrideStore.setOverride(item.id, {
+      status: 'needs_attention',
+      manualAttention: true
+    });
+
+    await assistantRuntime.incidentManager.openIncident({
+      service: item.service,
+      severity: 'critical',
+      reasonCode: 'manual_attention',
+      title: `Ручная пометка: ${item.serviceLabel}`,
+      detail: item.previewText || item.title,
+      externalRef: item.id,
+      meta: {
+        service: item.service
+      }
+    });
+
+    return res.json({
+      data: {
+        ok: true,
+        override
+      }
+    });
+  } catch (error) {
+    console.error('[API] Mark attention error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/interactions/:id/actions/reprocess', async (req, res) => {
+  try {
+    const item = await interactionReadModel.getInteraction(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Обращение не найдено' });
+    }
+
+    let result;
+    if (item.service === 'instagram_dm') {
+      await assistantRuntime.processDMConversation(item.conversationId);
+      result = {
+        status: 'ok',
+        message: 'Диалог Instagram отправлен в повторную обработку.'
+      };
+    } else if (item.service === 'instagram_comment') {
+      await assistantRuntime.processCommentEvent(item.id);
+      result = {
+        status: 'ok',
+        message: 'Комментарий Instagram отправлен в повторную обработку.'
+      };
+    } else {
+      result = await executeServiceAction(item.service, 'process-pending');
+    }
+
+    return res.json({
+      data: result
+    });
+  } catch (error) {
+    console.error('[API] Reprocess interaction error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/instagram-contacts/:contactId/conversation', async (req, res) => {
+  try {
+    const [contact, conversation, interactions] = await Promise.all([
+      userManager.getUser(req.params.contactId),
+      userManager.getConversation(req.params.contactId, 20),
+      interactionReadModel.listInteractions({
+        service: 'instagram_dm',
+        contact_id: req.params.contactId
+      })
+    ]);
+
+    return res.json({
+      data: {
+        contact: {
+          id: contact?.user_id || contact?.id || req.params.contactId,
+          username: contact?.username || null,
+          dmEnabled: contact?.dm_enabled !== false,
+          commentEnabled: contact?.comment_enabled !== false
+        },
+        conversation,
+        interactions: interactions.data
+      }
+    });
+  } catch (error) {
+    console.error('[API] Instagram contact conversation error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/instagram-contacts/:contactId/automation', async (req, res) => {
+  try {
+    const updates = {};
+    if (typeof req.body?.dmEnabled === 'boolean') {
+      updates.dm_enabled = req.body.dmEnabled;
+    }
+    if (typeof req.body?.commentEnabled === 'boolean') {
+      updates.comment_enabled = req.body.commentEnabled;
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'Нет изменений для сохранения' });
+    }
+
+    const user = await userManager.updateUser(req.params.contactId, updates);
+    return res.json({
+      data: {
+        id: user?.user_id || user?.id || req.params.contactId,
+        username: user?.username || null,
+        dmEnabled: user?.dm_enabled !== false,
+        commentEnabled: user?.comment_enabled !== false
+      }
+    });
+  } catch (error) {
+    console.error('[API] Instagram automation error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/services', async (req, res) => {
+  try {
+    const payload = await buildServicesControlPayload();
+    res.json(payload);
+  } catch (error) {
+    console.error('[API] Services error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/services/:service/actions/:action', async (req, res) => {
+  try {
+    const result = await executeServiceAction(req.params.service, req.params.action);
+    res.json({
+      data: result
+    });
+  } catch (error) {
+    console.error('[API] Service action error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/profile', async (req, res) => {
+  try {
+    const payload = buildProfilePayload({
+      user: req.appUser,
+      telegramConfigured: assistantRuntime.incidentManager.notifier.isConfigured()
+    });
+    res.json(payload);
+  } catch (error) {
+    console.error('[API] Profile error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API endpoints for dashboard
@@ -1019,15 +1472,19 @@ app.delete('/api/users/:id/conversation', async (req, res) => {
 
 app.get('/api/overview', async (req, res) => {
   try {
-    const snapshots = await loadRealtimeDashboardSnapshots({
-      includeGoogleReviews: true,
-      includeThreadPosts: false
-    });
-    const incidents = buildRealtimeDashboardIncidents(snapshots);
+    await syncSlaBreaches();
+    const [interactions, servicesPayload] = await Promise.all([
+      interactionReadModel.listInteractions({
+        service: 'all',
+        status: 'all',
+        limit: 120
+      }),
+      buildServicesControlPayload()
+    ]);
 
-    res.json(buildRealtimeOverviewPayload({
-      ...snapshots,
-      incidents
+    res.json(buildOverviewPayload({
+      interactions: interactions.data,
+      services: servicesPayload.services
     }));
   } catch (error) {
     console.error('[API] Overview error:', error.message);
@@ -1128,15 +1585,7 @@ app.post('/api/integrations/:service/reauthorize', async (req, res) => {
 
 app.get('/api/integrations', async (req, res) => {
   try {
-    const snapshots = await loadRealtimeDashboardSnapshots({
-      includeGoogleReviews: false,
-      includeThreadPosts: false
-    });
-
-    res.json({
-      generatedAt: new Date().toISOString(),
-      services: snapshots.integrations
-    });
+    res.json(await buildServicesControlPayload());
   } catch (error) {
     console.error('[API] Integrations error:', error.message);
     res.status(500).json({ error: error.message });
@@ -1763,22 +2212,42 @@ schedule.scheduleJob('0 20 * * *', async () => {
   await threadsKeywordSearch.runSearchCycle(2);
 });
 
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/login.html'));
+});
+
+app.get('/forgot-password', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/forgot-password.html'));
+});
+
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/register.html'));
+});
+
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/reset-password.html'));
+});
+
 // Dashboard route
-app.get('/', (req, res) => {
+app.get('/', requireAppSessionPage, (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 INFINITY LIFE Assistant Server running on http://localhost:${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}`);
-  console.log(`📸 Instagram Webhook: http://localhost:${PORT}/webhook`);
-  console.log(`📺 YouTube OAuth: http://localhost:${PORT}/auth/youtube`);
-  console.log(`📺 YouTube Webhook: http://localhost:${PORT}/webhook/youtube`);
-  console.log(`📍 Google Business OAuth: http://localhost:${PORT}/auth/google`);
-  console.log(`🧵 Threads Search: /api/threads/status | /api/threads/search`);
-  console.log(`⏱️  Buffer processing: every 60 seconds`);
-  console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}`);
-  console.log(`📍 Google Business authorized: ${googleBusinessOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/google'}`);
-  console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00`);
-  console.log('');
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 INFINITY LIFE Assistant Server running on http://localhost:${PORT}`);
+    console.log(`📊 Dashboard: http://localhost:${PORT}`);
+    console.log(`📸 Instagram Webhook: http://localhost:${PORT}/webhook`);
+    console.log(`📺 YouTube OAuth: http://localhost:${PORT}/auth/youtube`);
+    console.log(`📺 YouTube Webhook: http://localhost:${PORT}/webhook/youtube`);
+    console.log(`📍 Google Business OAuth: http://localhost:${PORT}/auth/google`);
+    console.log(`🧵 Threads Search: /api/threads/status | /api/threads/search`);
+    console.log(`⏱️  Buffer processing: every 60 seconds`);
+    console.log(`🎬 YouTube authorized: ${youtubeOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/youtube'}`);
+    console.log(`📍 Google Business authorized: ${googleBusinessOAuth.isAuthorized() ? 'Yes ✅' : 'No ❌ - visit /auth/google'}`);
+    console.log(`🧵 Threads Search scheduled: 08:00, 14:00, 20:00`);
+    console.log('');
+  });
+}
+
+module.exports = app;
