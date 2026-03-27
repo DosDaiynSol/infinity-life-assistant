@@ -3,9 +3,21 @@ const instagramApi = require('../services/instagram-api');
 const userManager = require('../services/user-manager');
 const instagramDB = require('../services/instagram-database');
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+let openai = null;
+
+function getOpenAIClient() {
+    if (!process.env.OPENAI_API_KEY) {
+        return null;
+    }
+
+    if (!openai) {
+        openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+        });
+    }
+
+    return openai;
+}
 
 const CLINIC_PHONE = process.env.CLINIC_PHONE || '87470953952';
 const OWN_ACCOUNT_ID = process.env.INSTAGRAM_PAGE_ID || '17841448174425966';
@@ -74,7 +86,12 @@ function quickFilter(comment) {
  */
 async function llmEvaluate(text) {
     try {
-        const response = await openai.chat.completions.create({
+        const client = getOpenAIClient();
+        if (!client) {
+            throw new Error('OPENAI_API_KEY is not configured');
+        }
+
+        const response = await client.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
                 {
@@ -165,7 +182,12 @@ async function generateAIResponse(username, commentText, isKz) {
 - Для Instagram: без хэштегов, неформально`;
 
     try {
-        const response = await openai.chat.completions.create({
+        const client = getOpenAIClient();
+        if (!client) {
+            return null;
+        }
+
+        const response = await client.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
                 { role: 'system', content: systemPrompt },
@@ -306,4 +328,13 @@ async function handleCommentBatch(comments) {
     return results;
 }
 
-module.exports = { handleCommentBatch, REJECTION_REASONS };
+module.exports = {
+    handleCommentBatch,
+    REJECTION_REASONS,
+    TEMPLATE_RESPONSE,
+    TEMPLATE_RESPONSE_KZ,
+    generateAIResponse,
+    isKazakh,
+    llmEvaluate,
+    quickFilter
+};

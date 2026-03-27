@@ -3,20 +3,17 @@
 
   let state = Object.freeze({
     activePage: 'overview',
-    selectedPlatform: 'instagram',
-    queueFilter: 'all',
     loadingPage: null,
     lastSync: null,
     toast: null,
     errors: Object.freeze({}),
     pages: Object.freeze({
       overview: null,
-      queues: null,
-      platforms: null,
-      reviews: null,
+      'live-feed': null,
+      incidents: null,
       integrations: null,
-      activity: null,
-      platformDetails: Object.freeze({})
+      channels: null,
+      activity: null
     })
   });
 

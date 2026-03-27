@@ -2,9 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const MessageBuffer = require('./buffer');
-const { handleCommentBatch } = require('./handlers/comments');
-const { handleDMBatch } = require('./handlers/dm');
+const InstagramLiveAssistant = require('./services/instagram-live-assistant');
 const userManager = require('./services/user-manager');
 const statsManager = require('./services/stats-manager');
 
@@ -36,60 +34,30 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../dashboard')));
 
-// Initialize message buffer
-const buffer = new MessageBuffer();
+const assistantRuntime = new InstagramLiveAssistant();
 
-// In-memory history (for current session)
-const sessionHistory = [];
+// Legacy queue endpoints are deprecated, but we keep an empty shape so older
+// helpers do not crash while the dashboard is being migrated.
+const buffer = Object.freeze({
+  comments: Object.freeze([]),
+  dms: Object.freeze([]),
+  flush() {
+    return {
+      comments: [],
+      dms: [],
+      commentsByUser: {},
+      dmsByUser: {}
+    };
+  }
+});
 
-// Process buffer function - reusable for auto and manual triggers
 async function processBuffer() {
-  const batch = buffer.flush();
-
-  if (batch.comments.length === 0 && batch.dms.length === 0) {
-    console.log(`[${new Date().toISOString()}] Buffer empty, nothing to process`);
-    return { comments: 0, dms: 0, responses: 0 };
-  }
-
-  console.log(`[${new Date().toISOString()}] Processing batch: ${batch.comments.length} comments, ${batch.dms.length} DMs`);
-
-  let responsesCount = 0;
-
-  // Process comments
-  if (batch.comments.length > 0) {
-    const commentResults = await handleCommentBatch(batch.comments);
-    const responded = commentResults.filter(r => r.responded).length;
-    responsesCount += responded;
-    statsManager.trackInstagramResponse(responded);
-
-    // Track stats only — history is already saved inside handleCommentBatch()
-    commentResults.forEach(r => {
-      statsManager.trackInstagramComment(r.username);
-    });
-  }
-
-  // Process DMs
-  if (batch.dms.length > 0) {
-    const dmResults = await handleDMBatch(batch.dms);
-    const responded = dmResults.filter(r => r.responded).length;
-    responsesCount += responded;
-    statsManager.trackInstagramResponse(responded);
-
-    // Track stats only — history is already saved inside handleDMBatch()
-    dmResults.forEach(r => {
-      statsManager.trackInstagramDM(r.senderId);
-    });
-  }
-
   return {
-    comments: batch.comments.length,
-    dms: batch.dms.length,
-    responses: responsesCount
+    comments: 0,
+    dms: 0,
+    responses: 0
   };
 }
-
-// Auto-process buffer every minute (Instagram)
-setInterval(processBuffer, 60000);
 
 // YouTube daily check at 10:00 AM (instead of 5-min polling)
 let youtubeLastProcessed = null;
@@ -252,6 +220,11 @@ function getServiceReauthConfig(service) {
       status: 'ok',
       url: '/auth/google',
       message: 'Открыт сценарий Google Business OAuth.'
+    },
+    instagram_meta: {
+      status: 'manual_required',
+      url: 'https://developers.facebook.com/apps/',
+      message: 'Токены Meta для Instagram нужно обновить вручную в настройках приложения Meta.'
     },
     instagram_messaging: {
       status: 'manual_required',
@@ -1166,6 +1139,415 @@ function toArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+function buildRealtimeIntegrationServices({ instagramRealtime, youtube, google, threads, crosspost }) {
+  const now = new Date().toISOString();
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  const services = [
+    {
+      ...instagramRealtime.integration,
+      lastCheckedAt: instagramRealtime.integration.lastCheckedAt || now,
+      actions: ['reauthorize']
+    },
+    {
+      id: 'youtube',
+      name: 'YouTube',
+      provider: 'Google',
+      status: youtube.authorized ? 'healthy' : 'reauth_required',
+      summary: youtube.authorized
+        ? `${youtube.stats.totalResponses || 0} ответов отправлено, sync идёт по расписанию`
+        : 'Для доступа к каналу нужна новая авторизация',
+      lastCheckedAt: now,
+      lastError: youtube.authorized ? null : 'Токен YouTube OAuth недоступен.',
+      actions: ['reauthorize']
+    },
+    {
+      id: 'google_business',
+      name: 'Google Business',
+      provider: 'Google',
+      status: google.authorized ? (google.reviewsError ? 'degraded' : 'healthy') : 'reauth_required',
+      summary: google.authorized
+        ? `${google.stats.pendingReviews || 0} отзывов без ответа, ${google.stats.escalationReviews || 0} рискованных`
+        : 'Нужна повторная авторизация Google Business',
+      lastCheckedAt: now,
+      lastError: google.reviewsError || (google.authorized ? null : 'Refresh token для Google Business не настроен.'),
+      actions: ['reauthorize']
+    },
+    {
+      id: 'threads',
+      name: 'Threads',
+      provider: 'Meta',
+      status: threads.tokenStatus.hasToken
+        ? (threads.tokenStatus.expired ? 'reauth_required' : 'healthy')
+        : 'reauth_required',
+      summary: threads.tokenStatus.expired
+        ? 'Токен Threads истёк, нужен новый consent'
+        : `${threads.stats.postsFound || 0} сигналов найдено, ${threads.stats.replied || 0} ответов отправлено`,
+      lastCheckedAt: now,
+      lastError: threads.tokenStatus.error || (threads.tokenStatus.hasToken ? null : 'Токен Threads не найден.'),
+      actions: ['reauthorize']
+    },
+    {
+      id: 'crosspost',
+      name: 'Кросспост',
+      provider: 'Meta / VK / YouTube',
+      status: crosspostFailed > 0 ? 'degraded' : 'healthy',
+      summary: crosspostFailed > 0
+        ? `${crosspostFailed} последних доставок завершились ошибкой`
+        : 'Последние доставки прошли без ошибок',
+      lastCheckedAt: now,
+      lastError: crosspostFailed > 0 ? 'Есть ошибки в недавних доставках кросспоста.' : null,
+      actions: []
+    }
+  ];
+
+  return services.sort((left, right) => getStatusWeight(left.status) - getStatusWeight(right.status));
+}
+
+function buildRealtimeDashboardIncidents({ instagramRealtime, integrations, google, crosspost }) {
+  const incidents = instagramRealtime.incidents.map((incident) => createIncident({
+    id: incident.id,
+    severity: incident.severity,
+    source: incident.service,
+    title: incident.title,
+    detail: incident.detail,
+    actionLabel: incident.service === 'instagram_meta' ? 'Открыть авторизацию' : null,
+    actionType: incident.service === 'instagram_meta' ? 'reauthorize' : null,
+    actionService: incident.service === 'instagram_meta' ? 'instagram_meta' : null
+  }));
+
+  integrations
+    .filter((service) => service.status === 'reauth_required' && service.id !== 'instagram_meta')
+    .forEach((service) => {
+      incidents.push(createIncident({
+        id: `${service.id}-reauth`,
+        severity: 'critical',
+        source: service.name,
+        title: `Нужна повторная авторизация: ${service.name}`,
+        detail: service.lastError || service.summary,
+        actionLabel: 'Открыть авторизацию',
+        actionType: 'reauthorize',
+        actionService: service.id
+      }));
+    });
+
+  if ((google.stats.escalationReviews || 0) > 0) {
+    incidents.push(createIncident({
+      id: 'google-escalation-reviews',
+      severity: 'critical',
+      source: 'Google Отзывы',
+      title: `${google.stats.escalationReviews} отзывов требуют эскалации`,
+      detail: 'Найдены отзывы с повышенным репутационным риском.'
+    }));
+  }
+
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  if (crosspostFailed > 0) {
+    incidents.push(createIncident({
+      id: 'crosspost-delivery-failures',
+      severity: 'warning',
+      source: 'Кросспост',
+      title: `${crosspostFailed} недавних ошибок доставки`,
+      detail: 'Есть публикации, которые не дошли до всех каналов.'
+    }));
+  }
+
+  return incidents
+    .sort((left, right) => getSeverityWeight(left.severity) - getSeverityWeight(right.severity))
+    .slice(0, 20);
+}
+
+function buildRealtimeOverviewPayload({ instagramRealtime, youtube, google, threads, crosspost, integrations, incidents }) {
+  const degradedIntegrations = integrations.filter((service) => service.status !== 'healthy').length;
+  const responsesDelivered = (instagramRealtime.metrics.delivered || 0)
+    + (youtube.stats.totalResponses || 0)
+    + (google.stats.totalReplied || 0)
+    + (threads.stats.replied || 0);
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      openIncidents: incidents.length,
+      degradedIntegrations,
+      totalIntegrations: integrations.length,
+      liveEvents: instagramRealtime.metrics.inbound || 0,
+      autoReplies: instagramRealtime.metrics.autoReplies || 0,
+      safeFallbacks: instagramRealtime.metrics.safeFallbacks || 0,
+      escalations: instagramRealtime.metrics.escalations || 0,
+      p95ReplySeconds: instagramRealtime.metrics.p95ReplySeconds,
+      responsesDelivered
+    },
+    metrics: [
+      {
+        id: 'incidents',
+        label: 'Инциденты',
+        value: incidents.length,
+        detail: incidents.filter((incident) => incident.severity === 'critical').length > 0
+          ? `${incidents.filter((incident) => incident.severity === 'critical').length} критичных`
+          : 'Критичных нет',
+        tone: incidents.some((incident) => incident.severity === 'critical') ? 'critical' : 'healthy'
+      },
+      {
+        id: 'latency',
+        label: 'P95 ответ',
+        value: instagramRealtime.metrics.p95ReplySeconds === null
+          ? 'n/a'
+          : `${instagramRealtime.metrics.p95ReplySeconds.toFixed(1)}s`,
+        detail: 'Instagram live reply latency',
+        tone: instagramRealtime.metrics.p95ReplySeconds !== null && instagramRealtime.metrics.p95ReplySeconds > 5
+          ? 'warning'
+          : 'healthy'
+      },
+      {
+        id: 'delivery',
+        label: 'Доставлено',
+        value: responsesDelivered,
+        detail: `${instagramRealtime.metrics.failed || 0} ошибок Instagram, ${crosspostFailed} ошибок кросспоста`,
+        tone: (instagramRealtime.metrics.failed || 0) > 0 ? 'warning' : 'healthy'
+      },
+      {
+        id: 'integrations',
+        label: 'Интеграции',
+        value: `${integrations.length - degradedIntegrations}/${integrations.length}`,
+        detail: `${degradedIntegrations} требуют внимания`,
+        tone: degradedIntegrations > 0 ? 'warning' : 'healthy'
+      }
+    ],
+    incidents: incidents.slice(0, 8),
+    liveFeed: instagramRealtime.liveFeed.slice(0, 8),
+    integrations: integrations.map((service) => ({
+      id: service.id,
+      name: service.name,
+      provider: service.provider,
+      status: service.status,
+      summary: service.summary
+    }))
+  };
+}
+
+function buildLiveFeedPayload(instagramRealtime) {
+  return {
+    generatedAt: new Date().toISOString(),
+    items: instagramRealtime.liveFeed
+  };
+}
+
+function buildIncidentsPayload(incidents) {
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      total: incidents.length,
+      critical: incidents.filter((incident) => incident.severity === 'critical').length,
+      warning: incidents.filter((incident) => incident.severity === 'warning').length
+    },
+    items: incidents
+  };
+}
+
+function buildChannelsPayload({ instagramRealtime, youtube, google, threads, crosspost, integrations }) {
+  const integrationMap = new Map(integrations.map((service) => [service.id, service]));
+  const crosspostFailed = (crosspost.counts?.facebook?.failed || 0)
+    + (crosspost.counts?.youtube?.failed || 0)
+    + (crosspost.counts?.vk?.failed || 0);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items: [
+      {
+        id: 'instagram',
+        name: 'Instagram',
+        status: integrationMap.get('instagram_meta')?.status || 'healthy',
+        summary: 'Webhook-driven flow для DM и комментариев без ручной очереди.',
+        metrics: [
+          { label: 'Входящих 24ч', value: instagramRealtime.metrics.inbound || 0 },
+          { label: 'Доставлено', value: instagramRealtime.metrics.delivered || 0 },
+          { label: 'Эскалации', value: instagramRealtime.metrics.escalations || 0 }
+        ],
+        recent: instagramRealtime.liveFeed.slice(0, 5).map((item) => ({
+          id: item.id,
+          title: item.title,
+          detail: truncateText(item.responseText || item.text || '', 96),
+          status: item.status,
+          timestamp: item.updatedAt || item.timestamp
+        }))
+      },
+      {
+        id: 'youtube',
+        name: 'YouTube',
+        status: integrationMap.get('youtube')?.status || 'healthy',
+        summary: 'Гибридный канал: фоновый sync комментариев по расписанию.',
+        metrics: [
+          { label: 'Видео', value: youtube.stats.processedVideos || 0 },
+          { label: 'Комментарии', value: youtube.stats.totalComments || 0 },
+          { label: 'Ответы', value: youtube.stats.totalResponses || 0 }
+        ],
+        recent: youtube.history.slice(0, 5).map((item) => ({
+          id: item.id,
+          title: item.author || 'Неизвестный автор',
+          detail: truncateText(item.response || item.comment || '', 96),
+          status: 'sent',
+          timestamp: item.timestamp
+        }))
+      },
+      {
+        id: 'google',
+        name: 'Google Отзывы',
+        status: integrationMap.get('google_business')?.status || 'healthy',
+        summary: 'Отзывы и репутационные инциденты клиники.',
+        metrics: [
+          { label: 'Всего отзывов', value: google.stats.totalReviews || 0 },
+          { label: 'Без ответа', value: google.stats.pendingReviews || 0 },
+          { label: 'Эскалации', value: google.stats.escalationReviews || 0 }
+        ],
+        recent: google.reviews.slice(0, 5).map((review) => ({
+          id: review.id,
+          title: `${review.rating || 0}★ ${review.reviewer}`,
+          detail: truncateText(review.reply || review.comment || '', 96),
+          status: review.status,
+          timestamp: review.createdAt
+        }))
+      },
+      {
+        id: 'threads',
+        name: 'Threads',
+        status: integrationMap.get('threads')?.status || 'healthy',
+        summary: 'Discovery-канал со фоновым поиском и policy engine.',
+        metrics: [
+          { label: 'Найдено', value: threads.stats.postsFound || 0 },
+          { label: 'Проверено', value: threads.stats.validated || 0 },
+          { label: 'Ответы', value: threads.stats.replied || 0 }
+        ],
+        recent: threads.posts.slice(0, 5).map((post) => ({
+          id: `threads-${post.id}`,
+          title: `@${post.username || 'неизвестно'}`,
+          detail: truncateText(post.reply_text || post.text || '', 96),
+          status: post.status,
+          timestamp: post.replied_at || post.created_at
+        }))
+      },
+      {
+        id: 'crosspost',
+        name: 'Кросспост',
+        status: integrationMap.get('crosspost')?.status || 'healthy',
+        summary: 'Состояние доставки публикаций по каналам.',
+        metrics: [
+          { label: 'В очереди', value: crosspost.counts?.total || 0 },
+          { label: 'Ошибки', value: crosspostFailed },
+          { label: 'Цикл', value: crosspost.isPolling ? 'Активен' : 'Пауза' }
+        ],
+        recent: (crosspost.recentPosts || []).slice(0, 5).map((post) => ({
+          id: `crosspost-${post.id}`,
+          title: `Публикация ${post.instagramId}`,
+          detail: Object.entries(post.statuses || {})
+            .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
+            .join(' | '),
+          status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
+          timestamp: post.createdAt || post.postedAt
+        }))
+      }
+    ]
+  };
+}
+
+function buildRealtimeActivityPayload({ instagramActivity, youtube, google, threads, crosspost }) {
+  const items = [
+    ...instagramActivity.map((item) => ({
+      id: item.id,
+      source: item.source,
+      title: item.title,
+      detail: truncateText(item.detail || '', 120),
+      status: item.status,
+      timestamp: item.timestamp
+    })),
+    ...youtube.history.slice(0, 8).map((item) => ({
+      id: `activity-youtube-${item.id}`,
+      source: 'YouTube',
+      title: `Ответ для ${item.author || 'зрителя'}`,
+      detail: truncateText(item.response || item.comment || '', 120),
+      status: 'sent',
+      timestamp: item.timestamp
+    })),
+    ...google.reviews
+      .filter((review) => review.status === 'replied')
+      .slice(0, 8)
+      .map((review) => ({
+        id: `activity-google-${review.id}`,
+        source: 'Google Отзывы',
+        title: `Ответ для ${review.reviewer}`,
+        detail: truncateText(review.reply || review.comment || '', 120),
+        status: 'sent',
+        timestamp: review.createdAt
+      })),
+    ...threads.posts
+      .filter((post) => post.status === 'replied')
+      .slice(0, 8)
+      .map((post) => ({
+        id: `activity-threads-${post.id}`,
+        source: 'Threads',
+        title: `Ответ для @${post.username || 'неизвестно'}`,
+        detail: truncateText(post.reply_text || post.text || '', 120),
+        status: 'sent',
+        timestamp: post.replied_at || post.created_at
+      })),
+    ...(crosspost.recentPosts || []).slice(0, 8).map((post) => ({
+      id: `activity-crosspost-${post.id}`,
+      source: 'Кросспост',
+      title: `Статус доставки для ${post.instagramId}`,
+      detail: Object.entries(post.statuses || {})
+        .map(([channel, status]) => `${channel}: ${getOperationalStatusLabel(status)}`)
+        .join(' | '),
+      status: Object.values(post.statuses || {}).some((status) => status === 'failed') ? 'failed' : 'processed',
+      timestamp: post.createdAt || post.postedAt || null
+    }))
+  ];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items: items
+      .sort((left, right) => {
+        const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : 0;
+        const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 50)
+  };
+}
+
+async function loadRealtimeDashboardSnapshots({ includeGoogleReviews = true, includeThreadPosts = true } = {}) {
+  const [instagramRealtime, youtube, google, threads, crosspost] = await Promise.all([
+    assistantRuntime.getInstagramSummary(),
+    loadYouTubeOperationalData(),
+    loadGoogleOperationalData({ includeReviews: includeGoogleReviews }),
+    loadThreadsOperationalData({ includePosts: includeThreadPosts }),
+    loadCrosspostOperationalData()
+  ]);
+
+  const integrations = buildRealtimeIntegrationServices({
+    instagramRealtime,
+    youtube,
+    google,
+    threads,
+    crosspost
+  });
+
+  return {
+    instagramRealtime,
+    youtube,
+    google,
+    threads,
+    crosspost,
+    integrations
+  };
+}
+
 // Webhook verification (Meta/Instagram)
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -1188,7 +1570,7 @@ app.get('/webhook', (req, res) => {
 });
 
 // Webhook endpoint
-app.post('/webhook', (req, res) => {
+app.post('/webhook', async (req, res) => {
   let payload = tryParseJson(req.body);
   payload = unwrapPayload(payload);
 
@@ -1200,41 +1582,18 @@ app.post('/webhook', (req, res) => {
   console.log('[Webhook received]', JSON.stringify(payload, null, 2));
 
   if (payload.object === 'instagram') {
-    const entries = toArray(payload.entry);
-    for (const entry of entries) {
-      // Handle Direct Messages
-      const messaging = toArray(entry.messaging);
-      if (messaging.length > 0) {
-        for (const msg of messaging) {
-          if (msg.message && !msg.message.is_deleted && msg.message.text) {
-            buffer.addDM({
-              senderId: msg.sender.id,
-              messageId: msg.message.mid,
-              text: msg.message.text,
-              timestamp: msg.timestamp
-            });
-            console.log(`[DM] From: ${msg.sender.id}, Text: ${msg.message.text}`);
-          }
-        }
-      }
-
-      // Handle Comments
-      const changes = toArray(entry.changes);
-      if (changes.length > 0) {
-        for (const change of changes) {
-          if (change.field === 'comments' && change.value) {
-            const val = change.value;
-            buffer.addComment({
-              commentId: val.id,
-              userId: val.from?.id,
-              username: val.from?.username,
-              text: val.text,
-              mediaId: val.media?.id
-            });
-            console.log(`[Comment] From: @${val.from?.username}, Text: ${val.text}`);
-          }
-        }
-      }
+    try {
+      const result = await assistantRuntime.ingestWebhookPayload(payload);
+      return res.status(200).json({
+        status: 'accepted',
+        ...result
+      });
+    } catch (error) {
+      console.error('[Webhook] Live ingest error:', error.message);
+      return res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
     }
   }
 
@@ -1245,6 +1604,7 @@ app.post('/webhook', (req, res) => {
 app.get('/api/stats', async (req, res) => {
   try {
     const instagramStats = await statsManager.getInstagramStats();
+    const pendingEvents = await assistantRuntime.eventStore.listPendingEvents(100);
     res.json({
       totalMessages: instagramStats.totalMessages,
       totalComments: instagramStats.totalComments,
@@ -1254,8 +1614,8 @@ app.get('/api/stats', async (req, res) => {
       uniqueCommenters: instagramStats.uniqueCommenters,
       dailyStats: instagramStats.dailyStats,
       bufferSize: {
-        comments: buffer.comments.length,
-        dms: buffer.dms.length
+        comments: pendingEvents.filter((event) => event.channel === 'comment').length,
+        dms: pendingEvents.filter((event) => event.channel === 'dm').length
       }
     });
   } catch (error) {
@@ -1274,26 +1634,18 @@ app.get('/api/history', async (req, res) => {
 });
 
 app.get('/api/buffer', (req, res) => {
-  res.json({
-    comments: buffer.comments,
-    dms: buffer.dms
+  res.status(410).json({
+    status: 'deprecated',
+    message: 'Queue buffer endpoint is deprecated. Use /api/live-feed instead.'
   });
 });
 
 // Manual process trigger
 app.post('/api/process-now', async (req, res) => {
-  console.log('[Manual trigger] Processing buffer now...');
-  try {
-    const result = await processBuffer();
-    res.json({
-      status: 'ok',
-      processed: result,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('[Manual trigger error]', error);
-    res.status(500).json({ status: 'error', message: error.message });
-  }
+  res.status(410).json({
+    status: 'deprecated',
+    message: 'Manual queue processing has been removed from the primary workflow.'
+  });
 });
 
 // User management API
@@ -1354,24 +1706,14 @@ app.delete('/api/users/:id/conversation', async (req, res) => {
 
 app.get('/api/overview', async (req, res) => {
   try {
-    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadYouTubeOperationalData(),
-      loadGoogleOperationalData({ includeReviews: true }),
-      loadThreadsOperationalData({ includePosts: false }),
-      loadCrosspostOperationalData()
-    ]);
+    const snapshots = await loadRealtimeDashboardSnapshots({
+      includeGoogleReviews: true,
+      includeThreadPosts: false
+    });
+    const incidents = buildRealtimeDashboardIncidents(snapshots);
 
-    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
-    const incidents = buildOperationalIncidents({ instagram, youtube, google, threads, crosspost, integrations });
-
-    res.json(buildOverviewPayload({
-      instagram,
-      youtube,
-      google,
-      threads,
-      crosspost,
-      integrations,
+    res.json(buildRealtimeOverviewPayload({
+      ...snapshots,
       incidents
     }));
   } catch (error) {
@@ -1381,90 +1723,47 @@ app.get('/api/overview', async (req, res) => {
 });
 
 app.get('/api/queues', async (req, res) => {
-  try {
-    const [instagram, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadGoogleOperationalData({ includeReviews: true }),
-      loadThreadsOperationalData({ includePosts: true }),
-      loadCrosspostOperationalData()
-    ]);
+  res.status(410).json({
+    status: 'deprecated',
+    message: 'Queue-oriented API is deprecated. Use /api/live-feed and /api/incidents.'
+  });
+});
 
-    res.json(buildQueuesPayload({ instagram, google, threads, crosspost }));
+app.get('/api/live-feed', async (req, res) => {
+  try {
+    const instagramRealtime = await assistantRuntime.getInstagramSummary();
+    res.json(buildLiveFeedPayload(instagramRealtime));
   } catch (error) {
-    console.error('[API] Queues error:', error.message);
+    console.error('[API] Live feed error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/platforms', async (req, res) => {
+app.get('/api/incidents', async (req, res) => {
   try {
-    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadYouTubeOperationalData(),
-      loadGoogleOperationalData({ includeReviews: true }),
-      loadThreadsOperationalData({ includePosts: false }),
-      loadCrosspostOperationalData()
-    ]);
+    const snapshots = await loadRealtimeDashboardSnapshots({
+      includeGoogleReviews: true,
+      includeThreadPosts: false
+    });
+    const incidents = buildRealtimeDashboardIncidents(snapshots);
 
-    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
-    res.json(buildPlatformsPayload({ instagram, youtube, google, threads, crosspost, integrations }));
+    res.json(buildIncidentsPayload(incidents));
   } catch (error) {
-    console.error('[API] Platforms error:', error.message);
+    console.error('[API] Incidents error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/platforms/:platform', async (req, res) => {
+app.get('/api/channels', async (req, res) => {
   try {
-    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadYouTubeOperationalData(),
-      loadGoogleOperationalData({ includeReviews: true }),
-      loadThreadsOperationalData({ includePosts: true }),
-      loadCrosspostOperationalData()
-    ]);
-
-    const integrations = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
-    const detail = buildPlatformDetail(req.params.platform, {
-      instagram,
-      youtube,
-      google,
-      threads,
-      crosspost,
-      integrations
+    const snapshots = await loadRealtimeDashboardSnapshots({
+      includeGoogleReviews: true,
+      includeThreadPosts: true
     });
 
-    if (!detail) {
-      return res.status(404).json({ error: 'Неизвестная площадка' });
-    }
-
-    res.json({
-      generatedAt: new Date().toISOString(),
-      ...detail
-    });
+    res.json(buildChannelsPayload(snapshots));
   } catch (error) {
-    console.error('[API] Platform detail error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/integrations', async (req, res) => {
-  try {
-    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadYouTubeOperationalData(),
-      loadGoogleOperationalData({ includeReviews: false }),
-      loadThreadsOperationalData({ includePosts: false }),
-      loadCrosspostOperationalData()
-    ]);
-
-    const services = buildIntegrationServices({ instagram, youtube, google, threads, crosspost });
-    res.json({
-      generatedAt: new Date().toISOString(),
-      services
-    });
-  } catch (error) {
-    console.error('[API] Integrations error:', error.message);
+    console.error('[API] Channels error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1482,21 +1781,58 @@ app.post('/api/integrations/:service/reauthorize', async (req, res) => {
   }
 });
 
+app.get('/api/integrations', async (req, res) => {
+  try {
+    const snapshots = await loadRealtimeDashboardSnapshots({
+      includeGoogleReviews: false,
+      includeThreadPosts: false
+    });
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      services: snapshots.integrations
+    });
+  } catch (error) {
+    console.error('[API] Integrations error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/activity', async (req, res) => {
   try {
-    const [instagram, youtube, google, threads, crosspost] = await Promise.all([
-      loadInstagramOperationalData(),
-      loadYouTubeOperationalData(),
-      loadGoogleOperationalData({ includeReviews: true }),
-      loadThreadsOperationalData({ includePosts: true }),
-      loadCrosspostOperationalData()
+    const [snapshots, instagramActivity] = await Promise.all([
+      loadRealtimeDashboardSnapshots({
+        includeGoogleReviews: true,
+        includeThreadPosts: true
+      }),
+      assistantRuntime.listActivity(50)
     ]);
 
-    res.json(buildActivityPayload({ instagram, youtube, google, threads, crosspost }));
+    res.json(buildRealtimeActivityPayload({
+      instagramActivity,
+      youtube: snapshots.youtube,
+      google: snapshots.google,
+      threads: snapshots.threads,
+      crosspost: snapshots.crosspost
+    }));
   } catch (error) {
     console.error('[API] Activity error:', error.message);
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get('/api/platforms', async (req, res) => {
+  res.status(410).json({
+    status: 'deprecated',
+    message: 'Platforms API has been replaced by /api/channels.'
+  });
+});
+
+app.get('/api/platforms/:platform', async (req, res) => {
+  res.status(410).json({
+    status: 'deprecated',
+    message: 'Platform detail API has been replaced by /api/channels.'
+  });
 });
 
 app.post('/api/platforms/:platform/actions/:action', async (req, res) => {

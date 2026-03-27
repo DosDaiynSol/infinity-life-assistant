@@ -4,9 +4,21 @@ const userManager = require('../services/user-manager');
 const instagramDB = require('../services/instagram-database');
 const clinicData = require('../data/clinic_data.json');
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+let openai = null;
+
+function getOpenAIClient() {
+    if (!process.env.OPENAI_API_KEY) {
+        return null;
+    }
+
+    if (!openai) {
+        openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+        });
+    }
+
+    return openai;
+}
 
 const CLINIC_PHONE = process.env.CLINIC_PHONE || '87470953952';
 
@@ -123,6 +135,11 @@ ${phoneInstruction}
  */
 async function generateDMResponse(userId, newMessages) {
     try {
+        const client = getOpenAIClient();
+        if (!client) {
+            return `Здравствуйте! Для записи и консультации позвоните ${CLINIC_PHONE}.`;
+        }
+
         // Get conversation history (now async)
         const history = await userManager.getConversation(userId, 10);
 
@@ -149,7 +166,7 @@ async function generateDMResponse(userId, newMessages) {
         // Save user message to memory
         await userManager.addMessage(userId, 'user', userText);
 
-        const response = await openai.chat.completions.create({
+        const response = await client.chat.completions.create({
             model: 'gpt-4o-mini',
             messages,
             max_tokens: 250,

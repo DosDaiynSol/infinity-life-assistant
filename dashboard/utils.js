@@ -19,7 +19,12 @@
     processed: 'Обработано',
     replied: 'Есть ответ',
     failed: 'Ошибка',
-    escalation: 'Эскалация'
+    escalation: 'Эскалация',
+    escalated: 'Эскалировано',
+    skipped: 'Пропущено',
+    merged: 'Склеено',
+    auto_reply: 'Автоответ',
+    safe_fallback: 'Safe fallback'
   };
 
   const toneLabels = {
@@ -64,15 +69,15 @@
   }
 
   function toneFromStatus(status) {
-    if (status === 'critical' || status === 'reauth_required' || status === 'failed' || status === 'escalation') {
+    if (status === 'critical' || status === 'reauth_required' || status === 'failed' || status === 'escalation' || status === 'escalated') {
       return 'critical';
     }
 
-    if (status === 'warning' || status === 'degraded' || status === 'pending') {
+    if (status === 'warning' || status === 'degraded' || status === 'pending' || status === 'safe_fallback') {
       return 'warning';
     }
 
-    if (status === 'healthy' || status === 'sent' || status === 'processed') {
+    if (status === 'healthy' || status === 'sent' || status === 'processed' || status === 'merged' || status === 'auto_reply') {
       return 'healthy';
     }
 
